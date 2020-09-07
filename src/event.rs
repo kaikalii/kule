@@ -127,6 +127,17 @@ macro_rules! keys {
                 }
             }
         }
+
+        impl From<Key> for u128 {
+            fn from(key: Key) -> Self {
+                1 << key as u128
+            }
+        }
+        impl From<u128> for Key {
+            fn from(u: u128) -> Self {
+                unsafe { std::mem::transmute(u) }
+            }
+        }
     };
 }
 
