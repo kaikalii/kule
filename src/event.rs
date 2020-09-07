@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use glium::glutin::event::{self, *};
 use vector2math::*;
 
-use crate::Vec2;
+use crate::{Camera, Vec2};
 
 pub use event::ElementState as ButtonState;
 pub use event::ModifiersState as Modifiers;
@@ -28,7 +30,11 @@ pub enum Event {
 }
 
 impl Event {
-    pub(crate) fn from_glutin(event: event::Event<()>, tracker: &mut StateTracker) -> Two<Self> {
+    pub(crate) fn from_glutin(
+        event: event::Event<()>,
+        tracker: &mut StateTracker,
+        camera: &mut Camera,
+    ) -> Two<Self> {
         let window_event = if let event::Event::WindowEvent { event, .. } = event {
             event
         } else {
@@ -38,7 +44,7 @@ impl Event {
             WindowEvent::CloseRequested => Event::CloseRequest.into(),
             WindowEvent::Resized(size) => {
                 let size = [size.width as f32, size.height as f32];
-                tracker.size = size;
+                camera.window_size = size;
                 Event::Resize(size).into()
             }
             WindowEvent::Moved(size) => Event::Move([size.x as f32, size.y as f32]).into(),
@@ -53,6 +59,10 @@ impl Event {
                 two
             }
             WindowEvent::MouseInput { button, state, .. } => {
+                match state {
+                    ButtonState::Pressed => tracker.mouse_buttons.insert(button),
+                    ButtonState::Released => tracker.mouse_buttons.remove(&button),
+                };
                 Event::MouseButton { button, state }.into()
             }
             WindowEvent::MouseWheel {
@@ -73,9 +83,9 @@ impl Event {
                     .map(Key::from_glutin)
                     .unwrap_or(Key::Unknown);
                 match input.state {
-                    ButtonState::Pressed => tracker.keys.add(key),
-                    ButtonState::Released => tracker.keys.remove(key),
-                }
+                    ButtonState::Pressed => tracker.keys.insert(key),
+                    ButtonState::Released => tracker.keys.remove(&key),
+                };
                 Event::Key {
                     key,
                     scancode: input.scancode,
@@ -88,22 +98,29 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StateTracker {
     pub mouse_pos: Vec2,
     pub modifiers: Modifiers,
-    pub keys: Bits<Key>,
-    pub size: Vec2,
+    keys: HashSet<Key>,
+    mouse_buttons: HashSet<MouseButton>,
 }
 
 impl StateTracker {
-    pub fn new(size: Vec2) -> Self {
-        StateTracker {
-            mouse_pos: [0.0; 2],
-            modifiers: Modifiers::default(),
-            keys: Bits::default(),
-            size,
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn key(&self, key: Key) -> bool {
+        self.keys.contains(&key)
+    }
+    pub fn mouse_button(&self, mb: MouseButton) -> bool {
+        self.mouse_buttons.contains(&mb)
+    }
+    pub fn key_diff(&self, neg: Key, pos: Key) -> f32 {
+        self.key(pos) as i8 as f32 - self.key(neg) as i8 as f32
+    }
+    pub fn key_diff2(&self, left: Key, right: Key, down: Key, up: Key) -> Vec2 {
+        [self.key_diff(left, right), self.key_diff(down, up)]
     }
 }
 
@@ -134,33 +151,6 @@ impl<T> Iterator for Two<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Bits<T>(u128, std::marker::PhantomData<T>);
-
-impl<T> Default for Bits<T> {
-    fn default() -> Self {
-        Bits(0, std::marker::PhantomData)
-    }
-}
-
-impl<T> Bits<T>
-where
-    T: From<u128> + Into<u128>,
-{
-    pub fn add(&mut self, val: T) {
-        self.0 |= val.into();
-    }
-    pub fn remove(&mut self, val: T) {
-        self.0 &= !val.into();
-    }
-    pub fn get(&self, val: T) -> bool {
-        (self.0 & val.into()).count_ones() > 0
-    }
-    pub fn diff(&self, start: T, end: T) -> f32 {
-        self.get(end) as i8 as f32 - self.get(start) as i8 as f32
-    }
-}
-
 macro_rules! keys {
     ($(($key:ident, $glutinkey:ident),)*) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -174,17 +164,6 @@ macro_rules! keys {
                 match key {
                     $(event::VirtualKeyCode::$glutinkey => Key::$key),*
                 }
-            }
-        }
-
-        impl From<Key> for u128 {
-            fn from(key: Key) -> Self {
-                1 << key as u128
-            }
-        }
-        impl From<u128> for Key {
-            fn from(u: u128) -> Self {
-                unsafe { std::mem::transmute(127 - u.leading_zeros() as u8) }
             }
         }
     };

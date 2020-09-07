@@ -27,57 +27,71 @@ fn uniforms() -> UniformsStorage<'static, [[f32; 4]; 4], EmptyUniforms> {
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
     pub center: Vec2,
-    pub zoom: f32,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Camera {
-            center: [0.0; 2],
-            zoom: 1.0,
-        }
-    }
+    pub zoom: Vec2,
+    pub(crate) window_size: Vec2,
 }
 
 impl Camera {
-    pub fn with_center(self, center: Vec2) -> Self {
+    pub fn window_size(self) -> Vec2 {
+        self.window_size
+    }
+    pub fn center(self, center: Vec2) -> Self {
         Camera { center, ..self }
     }
-    pub fn with_zoom(self, zoom: f32) -> Self {
+    pub fn zoom(self, zoom: Vec2) -> Self {
         Camera { zoom, ..self }
+    }
+    pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
+        pos.sub(self.window_size.div(2.0))
+            .div2([self.zoom.x(), -self.zoom.y()])
+            .mul(2.0)
+            .add(self.center)
+    }
+    pub fn coords_to_pos(self, coords: Vec2) -> Vec2 {
+        coords
+            .sub(self.center)
+            .div(2.0)
+            .mul2([self.zoom.x(), -self.zoom.y()])
+            .add(self.window_size.div(2.0))
+    }
+    pub fn zoom_on(self, zoom: Vec2, on: Vec2) -> Self {
+        let old_pos = self.pos_to_coords(on);
+        let new_cam = self.zoom(zoom);
+        let new_pos = new_cam.pos_to_coords(on);
+        new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
     }
     pub fn map_center<F>(self, f: F) -> Self
     where
         F: FnOnce(Vec2) -> Vec2,
     {
-        Camera {
-            center: f(self.center),
-            ..self
-        }
+        self.center(f(self.center))
     }
     pub fn map_zoom<F>(self, f: F) -> Self
     where
-        F: FnOnce(f32) -> f32,
+        F: FnOnce(Vec2) -> Vec2,
     {
-        Camera {
-            zoom: f(self.zoom),
-            ..self
-        }
+        self.zoom(f(self.zoom))
     }
-    fn transform_rect<R>(&self, window_size: Vec2, rect: R) -> R
+    pub fn map_zoom_on<F>(self, f: F, on: Vec2) -> Self
+    where
+        F: FnOnce(Vec2) -> Vec2,
+    {
+        self.zoom_on(f(self.zoom), on)
+    }
+    fn transform_rect<R>(&self, rect: R) -> R
     where
         R: Rectangle<Scalar = f32>,
     {
         R::new(
-            self.transform_point(window_size, rect.top_left()),
-            rect.size().div2(window_size).mul(self.zoom),
+            self.transform_point(rect.top_left()),
+            rect.size().div2(self.window_size).mul2(self.zoom),
         )
     }
-    fn transform_point<V>(&self, window_size: Vec2, p: V) -> V
+    fn transform_point<V>(&self, p: V) -> V
     where
         V: Vector2<Scalar = f32>,
     {
-        p.sub(self.center).mul(self.zoom).div2(window_size)
+        p.sub(self.center).mul2(self.zoom).div2(self.window_size)
     }
 }
 
@@ -86,7 +100,6 @@ pub struct Drawer<'a, S, F> {
     facade: &'a F,
     program: &'a Program,
     camera: Camera,
-    window_size: Vec2,
     indices: IndicesCache,
 }
 
@@ -100,14 +113,12 @@ where
         facade: &'a F,
         program: &'a Program,
         camera: Camera,
-        window_size: Vec2,
     ) -> Self {
         Drawer {
             surface,
             facade,
             program,
             camera,
-            window_size,
             indices: Default::default(),
         }
     }
@@ -128,8 +139,9 @@ where
     {
         let base_camera = self.camera;
         self.camera = Camera {
-            center: self.window_size.div(2.0),
-            zoom: 1.0,
+            center: base_camera.window_size.div(2.0),
+            zoom: [1.0, -1.0],
+            window_size: base_camera.window_size,
         };
         let res = g();
         self.camera = base_camera;
@@ -148,7 +160,7 @@ where
         R: Rectangle<Scalar = f32>,
     {
         let color: [f32; 4] = color.map();
-        let rect: [f32; 4] = self.camera.transform_rect(self.window_size, rect).map();
+        let rect: [f32; 4] = self.camera.transform_rect(rect).map();
         let vertices = VertexBuffer::new(
             self.facade,
             &[

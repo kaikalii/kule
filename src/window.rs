@@ -5,7 +5,7 @@ use vector2math::*;
 
 pub use window::WindowId;
 
-use crate::{Camera, Drawer, Event, StateTracker};
+use crate::{Camera, Drawer, Event, StateTracker, Vec2};
 
 pub trait App: Sized {
     fn builder() -> WindowBuilder<Self> {
@@ -33,6 +33,27 @@ impl<T> Window<T> {
     pub fn builder() -> WindowBuilder<T> {
         WindowBuilder::default()
     }
+    pub fn app<F>(self, f: F) -> Self
+    where
+        F: FnOnce(T) -> T,
+    {
+        Window {
+            app: f(self.app),
+            ..self
+        }
+    }
+    pub fn camera<F>(self, f: F) -> Self
+    where
+        F: FnOnce(Camera) -> Camera,
+    {
+        Window {
+            camera: f(self.camera),
+            ..self
+        }
+    }
+    pub fn mouse_coords(&self) -> Vec2 {
+        self.camera.pos_to_coords(self.tracker.mouse_pos)
+    }
     fn _window<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&window::Window) -> R,
@@ -44,13 +65,7 @@ impl<T> Window<T> {
         F: FnMut(&mut Drawer<Frame, Display>),
     {
         let mut frame = self.inner.display.draw();
-        let mut drawer = Drawer::new(
-            &mut frame,
-            &self.inner.display,
-            &self.program,
-            self.camera,
-            self.tracker.size,
-        );
+        let mut drawer = Drawer::new(&mut frame, &self.inner.display, &self.program, self.camera);
         f(&mut drawer);
         frame.finish().unwrap();
     }
@@ -106,6 +121,7 @@ where
             .with_inner_size(dpi::LogicalSize::new(self.size[0], self.size[1]));
         let cb = ContextBuilder::new();
         let display = Display::new(wb, cb, &event_loop)?;
+        let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
         let window = Window {
             app,
@@ -114,10 +130,11 @@ where
                 update_timer: Instant::now(),
             },
             program,
-            tracker: StateTracker::new(self.size),
+            tracker: StateTracker::new(),
             camera: Camera {
                 center: [0.0; 2],
-                zoom: 1.0,
+                zoom: [1.0; 2],
+                window_size: window_size.into(),
             },
         };
         let mut take_window = Some(if let Some(setup) = self.setup.take() {
@@ -135,7 +152,7 @@ where
                 }
             }
             // Handle events
-            for event in Event::from_glutin(event, &mut window.tracker) {
+            for event in Event::from_glutin(event, &mut window.tracker, &mut window.camera) {
                 if let (Event::CloseRequest, true) = (event, self.automatic_close) {
                     *cf = event_loop::ControlFlow::Exit;
                     break;
