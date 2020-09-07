@@ -20,6 +20,15 @@ pub trait Color: Copy {
     fn black() -> Self {
         Self::gray(0.0)
     }
+    fn red(r: f32) -> Self {
+        Self::black().with_r(r)
+    }
+    fn green(g: f32) -> Self {
+        Self::black().with_g(g)
+    }
+    fn blue(b: f32) -> Self {
+        Self::black().with_b(b)
+    }
     fn with_r(self, r: f32) -> Self {
         Self::rgba(r, self.g(), self.b(), self.alpha())
     }
@@ -37,6 +46,47 @@ pub trait Color: Copy {
         C: Color,
     {
         C::rgba(self.r(), self.g(), self.b(), self.alpha())
+    }
+    fn min<C>(self, other: C) -> Self
+    where
+        C: Color,
+    {
+        Self::rgba(
+            self.r().min(other.r()),
+            self.g().min(other.g()),
+            self.b().min(other.b()),
+            self.alpha().min(other.alpha()),
+        )
+    }
+    fn max<C>(self, other: C) -> Self
+    where
+        C: Color,
+    {
+        Self::rgba(
+            self.r().max(other.r()),
+            self.g().max(other.g()),
+            self.b().max(other.b()),
+            self.alpha().max(other.alpha()),
+        )
+    }
+    fn mul(self, val: f32) -> Self {
+        Self::rgba(
+            self.r() * val,
+            self.g() * val,
+            self.b() * val,
+            self.alpha() * val,
+        )
+    }
+    fn mul4<C>(self, other: C) -> Self
+    where
+        C: Color,
+    {
+        Self::rgba(
+            self.r() * other.r(),
+            self.g() * other.g(),
+            self.b() * other.b(),
+            self.alpha() * other.alpha(),
+        )
     }
 }
 
