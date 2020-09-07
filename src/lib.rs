@@ -11,7 +11,6 @@ mod draw;
 pub use draw::*;
 mod color;
 pub use color::*;
-mod fontdue;
 
 pub use vector2math::{f32::*, *};
 
