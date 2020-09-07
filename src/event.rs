@@ -119,8 +119,8 @@ impl StateTracker {
     pub fn key_diff(&self, neg: Key, pos: Key) -> f32 {
         self.key(pos) as i8 as f32 - self.key(neg) as i8 as f32
     }
-    pub fn key_diff2(&self, left: Key, right: Key, down: Key, up: Key) -> Vec2 {
-        [self.key_diff(left, right), self.key_diff(down, up)]
+    pub fn key_diff2(&self, left: Key, right: Key, up: Key, down: Key) -> Vec2 {
+        [self.key_diff(left, right), self.key_diff(up, down)]
     }
 }
 

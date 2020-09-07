@@ -43,7 +43,7 @@ impl Camera {
     }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
-            .div2([self.zoom.x(), -self.zoom.y()])
+            .div2(self.zoom)
             .mul(2.0)
             .add(self.center)
     }
@@ -51,7 +51,7 @@ impl Camera {
         coords
             .sub(self.center)
             .div(2.0)
-            .mul2([self.zoom.x(), -self.zoom.y()])
+            .mul2(self.zoom)
             .add(self.window_size.div(2.0))
     }
     pub fn zoom_on(self, zoom: Vec2, on: Vec2) -> Self {
@@ -84,14 +84,18 @@ impl Camera {
     {
         R::new(
             self.transform_point(rect.top_left()),
-            rect.size().div2(self.window_size).mul2(self.zoom),
+            rect.size()
+                .div2(self.window_size)
+                .mul2(self.zoom.mul2([1.0, -1.0])),
         )
     }
     fn transform_point<V>(&self, p: V) -> V
     where
         V: Vector2<Scalar = f32>,
     {
-        p.sub(self.center).mul2(self.zoom).div2(self.window_size)
+        p.sub(self.center)
+            .mul2(self.zoom.mul2([1.0, -1.0]))
+            .div2(self.window_size)
     }
 }
 

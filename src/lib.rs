@@ -25,10 +25,10 @@ fn test() {
     App::builder()
         .event(|_, window| window)
         .update(|dt, window| {
-            let wasd = window.tracker.key_diff2(Key::A, Key::D, Key::S, Key::W);
+            let wasd = window.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
             let arrows = window
                 .tracker
-                .key_diff2(Key::Left, Key::Right, Key::Down, Key::Up);
+                .key_diff2(Key::Left, Key::Right, Key::Up, Key::Down);
             let plus_minus = window.tracker.key_diff(Key::Minus, Key::Equals);
             let app = App {
                 pos: window.app.pos.add(wasd.mul(100.0 * dt)),
