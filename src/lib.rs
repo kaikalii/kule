@@ -24,35 +24,27 @@ fn test() {
     }
     App::builder()
         .event(|_, window| window)
-        .update(|dt, window| Window {
-            app: App {
-                pos: window.app.pos.add(
-                    window
-                        .tracker
-                        .key_diff2(Key::A, Key::D, Key::S, Key::W)
-                        .mul(100.0 * dt),
-                ),
-            },
-            camera: window
+        .update(|dt, window| {
+            let wasd = window.tracker.key_diff2(Key::A, Key::D, Key::S, Key::W);
+            let arrows = window
+                .tracker
+                .key_diff2(Key::Left, Key::Right, Key::Down, Key::Up);
+            let plus_minus = window.tracker.key_diff(Key::Minus, Key::Equals);
+            let app = App {
+                pos: window.app.pos.add(wasd.mul(100.0 * dt)),
+            };
+            let camera = window
                 .camera
-                .map_center(|center| {
-                    center.add(
-                        window
-                            .tracker
-                            .key_diff2(Key::Left, Key::Right, Key::Down, Key::Up)
-                            .mul(100.0 * dt),
-                    )
-                })
+                .map_center(|center| center.add(arrows.mul(100.0 * dt)))
                 .map_zoom_on(
-                    |zoom| {
-                        zoom.mul(
-                            1.1f32
-                                .powf(window.tracker.key_diff(Key::Minus, Key::Equals) * dt * 10.0),
-                        )
-                    },
+                    |zoom| zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)),
                     window.camera.coords_to_pos(window.app.pos),
-                ),
-            ..window
+                );
+            Window {
+                app,
+                camera,
+                ..window
+            }
         })
         .draw(|draw, window| {
             draw.clear(Col::black());
