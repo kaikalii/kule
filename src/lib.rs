@@ -51,10 +51,10 @@ fn test() {
         })
         .draw(|draw, window| {
             draw.clear(Col::black());
-            draw.rectangle(
-                [0.0, 1.0, 0.0, 1.0],
-                Rect::centered(window.app.pos, [40.0; 2]),
-            );
+            let rect = Rect::centered(window.app.pos, [40.0; 2]);
+            draw.rectangle(Col::red(1.0), rect);
+            draw.circle([1.0, 0.5, 0.5], Circ::new(window.app.pos, 15.0), 32);
+            draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
         })
         .run(App { pos: [200.0; 2] })
         .unwrap();

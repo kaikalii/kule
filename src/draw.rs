@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::once};
 
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Vec2};
+use crate::{Col, Color, Rect, Vec2};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
@@ -154,50 +154,203 @@ where
         self.surface
             .clear_color(color.r(), color.g(), color.b(), color.alpha())
     }
-    pub fn rectangle<C, R>(&mut self, color: C, rect: R)
+    pub fn rectangle<C, R>(&mut self, color: C, rect: R) -> Transformable<'a, '_, S, F>
     where
         C: Color,
         R: Rectangle<Scalar = f32>,
     {
-        let color: [f32; 4] = color.map();
-        let rect: [f32; 4] = self.camera.transform_rect(rect).map();
-        let vertices = VertexBuffer::new(
-            self.facade,
-            &[
-                Vertex {
-                    pos: rect.top_left(),
-                    color,
-                },
-                Vertex {
-                    pos: rect.top_right(),
-                    color,
-                },
-                Vertex {
-                    pos: rect.bottom_right(),
-                    color,
-                },
-                Vertex {
-                    pos: rect.bottom_left(),
-                    color,
-                },
-            ],
-        )
-        .unwrap();
-        self.surface
+        Transformable {
+            drawer: self,
+            ty: DrawType::Rectangle(rect.map()),
+            color: color.map(),
+            drawn: false,
+        }
+    }
+    pub fn circle<C, R>(
+        &mut self,
+        color: C,
+        circ: R,
+        resolution: u16,
+    ) -> Transformable<'a, '_, S, F>
+    where
+        C: Color,
+        R: Circle<Scalar = f32>,
+    {
+        Transformable {
+            drawer: self,
+            ty: DrawType::Ellipse {
+                center: circ.center().map(),
+                radii: circ.radius().square(),
+                resolution,
+            },
+            color: color.map(),
+            drawn: false,
+        }
+    }
+    pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'a, '_, S, F>
+    where
+        C: Color,
+        V: Vector2<Scalar = f32> + 'p,
+        P: IntoIterator<Item = &'p V>,
+    {
+        Transformable {
+            drawer: self,
+            ty: DrawType::Polygon(vertices.into_iter().map(|v| v.map()).collect()),
+            color: color.map(),
+            drawn: false,
+        }
+    }
+    pub fn line<C, V>(
+        &mut self,
+        color: C,
+        a: V,
+        b: V,
+        thickness: f32,
+    ) -> Transformable<'a, '_, S, F>
+    where
+        C: Color,
+        V: Vector2<Scalar = f32>,
+    {
+        let perp = b
+            .sub(a)
+            .unit()
+            .rotate_about([0.0; 2], f32::PI / 2.0)
+            .mul(thickness / 2.0);
+        self.polygon(color, &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)])
+    }
+}
+
+enum DrawType {
+    Rectangle(Rect),
+    Ellipse {
+        center: Vec2,
+        radii: Vec2,
+        resolution: u16,
+    },
+    Polygon(Vec<Vec2>),
+}
+
+pub struct Transformable<'a, 'b, S, F>
+where
+    S: Surface,
+    F: Facade,
+{
+    drawer: &'b mut Drawer<'a, S, F>,
+    ty: DrawType,
+    color: Col,
+    drawn: bool,
+}
+
+impl<'a, 'b, S, F> Transformable<'a, 'b, S, F>
+where
+    S: Surface,
+    F: Facade,
+{
+    pub fn draw(&mut self) {
+        let vertices = match self.ty {
+            DrawType::Rectangle(rect) => {
+                let rect = self.drawer.camera.transform_rect(rect);
+                VertexBuffer::new(
+                    self.drawer.facade,
+                    &[
+                        Vertex {
+                            pos: rect.top_left(),
+                            color: self.color,
+                        },
+                        Vertex {
+                            pos: rect.top_right(),
+                            color: self.color,
+                        },
+                        Vertex {
+                            pos: rect.bottom_right(),
+                            color: self.color,
+                        },
+                        Vertex {
+                            pos: rect.bottom_left(),
+                            color: self.color,
+                        },
+                    ],
+                )
+                .unwrap()
+            }
+            DrawType::Ellipse {
+                center,
+                radii,
+                resolution,
+            } => VertexBuffer::new(
+                self.drawer.facade,
+                &once(Vertex {
+                    pos: self.drawer.camera.transform_point(center),
+                    color: self.color,
+                })
+                .chain((0..resolution).map(|i| {
+                    Vertex {
+                        pos: self.drawer.camera.transform_point(
+                            center.add(
+                                (i as f32 / resolution as f32 * f32::tau())
+                                    .angle_as_vector()
+                                    .mul2(radii),
+                            ),
+                        ),
+                        color: self.color,
+                    }
+                }))
+                .collect::<Vec<_>>(),
+            )
+            .unwrap(),
+            DrawType::Polygon(ref vertices) => VertexBuffer::new(
+                self.drawer.facade,
+                &vertices
+                    .iter()
+                    .map(|&v| Vertex {
+                        pos: self.drawer.camera.transform_point(v),
+                        color: self.color,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
+        };
+        let indices = match self.ty {
+            DrawType::Rectangle(_) => self.drawer.indices.rectangle(self.drawer.facade),
+            DrawType::Ellipse { resolution, .. } => {
+                self.drawer.indices.ellipse(resolution, self.drawer.facade)
+            }
+            DrawType::Polygon(ref vertices) => self
+                .drawer
+                .indices
+                .polygon(vertices.len() as u16, self.drawer.facade),
+        };
+        self.drawer
+            .surface
             .draw(
                 &vertices,
-                self.indices.rectangle(self.facade),
-                self.program,
+                indices,
+                self.drawer.program,
                 &uniforms(),
                 &Default::default(),
             )
             .unwrap();
+        self.drawn = true;
+    }
+}
+
+impl<'a, 'b, S, F> Drop for Transformable<'a, 'b, S, F>
+where
+    S: Surface,
+    F: Facade,
+{
+    fn drop(&mut self) {
+        if !self.drawn {
+            self.draw();
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum IndicesType {
     Rectangle,
+    Ellipse(u16),
+    Polygon(u16),
 }
 
 #[derive(Default)]
@@ -218,6 +371,42 @@ impl IndicesCache {
             )
             .unwrap()
         })
+    }
+    fn ellipse<F>(&mut self, resolution: u16, facade: &F) -> &IndexBuffer<u16>
+    where
+        F: Facade,
+    {
+        self.map
+            .entry(IndicesType::Ellipse(resolution))
+            .or_insert_with(|| {
+                IndexBuffer::new(
+                    facade,
+                    index::PrimitiveType::TrianglesList,
+                    &(1..resolution)
+                        .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
+                        .chain(once(0).chain(once(resolution)).chain(once(1)))
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap()
+            })
+    }
+    fn polygon<F>(&mut self, vertices: u16, facade: &F) -> &IndexBuffer<u16>
+    where
+        F: Facade,
+    {
+        self.map
+            .entry(IndicesType::Polygon(vertices))
+            .or_insert_with(|| {
+                IndexBuffer::new(
+                    facade,
+                    index::PrimitiveType::TrianglesList,
+                    &(1..(vertices - 2))
+                        .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
+                        .chain(once(0).chain(once(vertices - 2)).chain(once(vertices - 1)))
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap()
+            })
     }
 }
 
