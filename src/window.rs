@@ -8,7 +8,7 @@ use crate::{Drawer, Event, StateTracker};
 pub struct Window {
     display: Display,
     program: Program,
-    state: StateTracker,
+    pub state: StateTracker,
 }
 
 impl Window {
@@ -39,8 +39,8 @@ pub struct WindowBuilder {
     pub size: [f32; 2],
     pub automatic_close: bool,
     pub startup: Callback<dyn FnOnce(Window) -> Window>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display>)>,
-    pub update: Callback<dyn Fn(Window, Event) -> Window>,
+    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display>, &Window)>,
+    pub update: Callback<dyn Fn(Event, Window) -> Window>,
 }
 
 impl Default for WindowBuilder {
@@ -91,18 +91,16 @@ impl WindowBuilder {
             // Draw
             if let event::Event::RedrawRequested(_) = &event {
                 if let Some(draw) = &self.draw {
-                    window.draw(draw);
+                    window.draw(|drawer| draw(drawer, &window));
                 }
             }
             // Update
-            if let Some(update) = &self.update {
-                for event in Event::from_glutin(event, &mut window.state) {
-                    if let (Event::CloseRequest, true) = (event, self.automatic_close) {
-                        *cf = event_loop::ControlFlow::Exit;
-                        break;
-                    } else {
-                        window = update(window, event);
-                    }
+            for event in Event::from_glutin(event, &mut window.state) {
+                if let (Event::CloseRequest, true) = (event, self.automatic_close) {
+                    *cf = event_loop::ControlFlow::Exit;
+                    break;
+                } else if let Some(update) = &self.update {
+                    window = update(event, window);
                 }
             }
             take_window = Some(window);
@@ -143,7 +141,7 @@ impl WindowBuilder {
     }
     pub fn draw<F>(self, f: F) -> Self
     where
-        F: Fn(&mut Drawer<Frame, Display>) + 'static,
+        F: Fn(&mut Drawer<Frame, Display>, &Window) + 'static,
     {
         WindowBuilder {
             draw: Some(Box::new(f)),
@@ -152,7 +150,7 @@ impl WindowBuilder {
     }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(Window, Event) -> Window + 'static,
+        F: Fn(Event, Window) -> Window + 'static,
     {
         WindowBuilder {
             update: Some(Box::new(f)),

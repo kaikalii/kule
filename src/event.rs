@@ -28,7 +28,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub(crate) fn from_glutin(event: event::Event<()>, state: &mut StateTracker) -> Two<Self> {
+    pub(crate) fn from_glutin(event: event::Event<()>, tracker: &mut StateTracker) -> Two<Self> {
         let window_event = if let event::Event::WindowEvent { event, .. } = event {
             event
         } else {
@@ -45,9 +45,9 @@ impl Event {
                 let pos = [position.x as f32, position.y as f32];
                 let two = Two::two(
                     Event::MouseAbsolute(pos),
-                    Event::MouseRelative(pos.sub(state.mouse_pos)),
+                    Event::MouseRelative(pos.sub(tracker.mouse_pos)),
                 );
-                state.mouse_pos = pos;
+                tracker.mouse_pos = pos;
                 two
             }
             WindowEvent::MouseInput { button, state, .. } => {
@@ -62,27 +62,45 @@ impl Event {
                 ..
             } => Event::Scroll([pos.x as f32, pos.y as f32]).into(),
             WindowEvent::ModifiersChanged(modifiers) => {
-                state.modifiers = modifiers;
+                tracker.modifiers = modifiers;
                 Two::none()
             }
-            WindowEvent::KeyboardInput { input, .. } => Event::Key {
-                key: input
+            WindowEvent::KeyboardInput { input, .. } => {
+                let key = input
                     .virtual_keycode
                     .map(Key::from_glutin)
-                    .unwrap_or(Key::Unknown),
-                scancode: input.scancode,
-                state: input.state,
+                    .unwrap_or(Key::Unknown);
+                match input.state {
+                    ButtonState::Pressed => tracker.keys.add(key),
+                    ButtonState::Released => tracker.keys.remove(key),
+                }
+                Event::Key {
+                    key,
+                    scancode: input.scancode,
+                    state: input.state,
+                }
+                .into()
             }
-            .into(),
             _ => Two::none(),
         }
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StateTracker {
     pub mouse_pos: Vec2,
     pub modifiers: Modifiers,
+    pub keys: Bits<Key>,
+}
+
+impl Default for StateTracker {
+    fn default() -> Self {
+        StateTracker {
+            mouse_pos: [0.0; 2],
+            modifiers: Modifiers::default(),
+            keys: Bits::default(),
+        }
+    }
 }
 
 pub(crate) struct Two<T>(Option<T>, Option<T>);
@@ -109,6 +127,30 @@ impl<T> Iterator for Two<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.take().or_else(|| self.1.take())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bits<T>(u128, std::marker::PhantomData<T>);
+
+impl<T> Default for Bits<T> {
+    fn default() -> Self {
+        Bits(0, std::marker::PhantomData)
+    }
+}
+
+impl<T> Bits<T>
+where
+    T: From<u128> + Into<u128>,
+{
+    pub fn add(&mut self, val: T) {
+        self.0 |= val.into();
+    }
+    pub fn remove(&mut self, val: T) {
+        self.0 &= !val.into();
+    }
+    pub fn get(&self, val: T) -> bool {
+        (self.0 & val.into()).count_ones() > 0
     }
 }
 
