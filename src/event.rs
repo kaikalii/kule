@@ -135,7 +135,7 @@ macro_rules! keys {
         }
         impl From<u128> for Key {
             fn from(u: u128) -> Self {
-                unsafe { std::mem::transmute(u) }
+                unsafe { std::mem::transmute(127 - u.leading_zeros() as u8) }
             }
         }
     };

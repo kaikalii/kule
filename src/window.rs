@@ -63,6 +63,9 @@ impl WindowBuilder {
         let event_loop = event_loop::EventLoop::new();
         #[cfg(test)]
         let event_loop = {
+            #[cfg(unix)]
+            use platform::unix::EventLoopExtUnix;
+            #[cfg(windows)]
             use platform::windows::EventLoopExtWindows;
             event_loop::EventLoop::<()>::new_any_thread()
         };

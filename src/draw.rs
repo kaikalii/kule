@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Vec2};
+use crate::{Col, Color, Vec2};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
@@ -44,27 +44,37 @@ where
             indices: Default::default(),
         }
     }
-    pub fn rectangle<R>(&mut self, color: Col, rect: R)
+    pub fn clear<C>(&mut self, color: C)
     where
+        C: Color,
+    {
+        self.surface
+            .clear_color(color.r(), color.g(), color.b(), color.alpha())
+    }
+    pub fn rectangle<C, R>(&mut self, color: C, rect: R)
+    where
+        C: Color,
         R: Rectangle<Scalar = f32>,
     {
+        let color: [f32; 4] = color.map();
+        let rect: [f32; 4] = rect.map();
         let vertices = VertexBuffer::new(
             self.facade,
             &[
                 Vertex {
-                    pos: rect.top_left().map(),
+                    pos: rect.top_left(),
                     color,
                 },
                 Vertex {
-                    pos: rect.top_right().map(),
+                    pos: rect.top_right(),
                     color,
                 },
                 Vertex {
-                    pos: rect.bottom_right().map(),
+                    pos: rect.bottom_right(),
                     color,
                 },
                 Vertex {
-                    pos: rect.bottom_left().map(),
+                    pos: rect.bottom_left(),
                     color,
                 },
             ],

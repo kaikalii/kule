@@ -23,6 +23,7 @@ fn test() {
             window
         })
         .draw(|draw| {
+            draw.clear(Col::black());
             draw.rectangle([1.0, 0.0, 0.0, 1.0], Rect::new([0.0; 2], [0.1; 2]));
             draw.rectangle([0.0, 1.0, 0.0, 1.0], Rect::new([-0.1; 2], [0.1; 2]));
         })
