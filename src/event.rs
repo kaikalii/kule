@@ -37,7 +37,9 @@ impl Event {
         match window_event {
             WindowEvent::CloseRequested => Event::CloseRequest.into(),
             WindowEvent::Resized(size) => {
-                Event::Resize([size.width as f32, size.height as f32]).into()
+                let size = [size.width as f32, size.height as f32];
+                tracker.size = size;
+                Event::Resize(size).into()
             }
             WindowEvent::Moved(size) => Event::Move([size.x as f32, size.y as f32]).into(),
             WindowEvent::Focused(foc) => Event::Focus(foc).into(),
@@ -91,14 +93,16 @@ pub struct StateTracker {
     pub mouse_pos: Vec2,
     pub modifiers: Modifiers,
     pub keys: Bits<Key>,
+    pub size: Vec2,
 }
 
-impl Default for StateTracker {
-    fn default() -> Self {
+impl StateTracker {
+    pub fn new(size: Vec2) -> Self {
         StateTracker {
             mouse_pos: [0.0; 2],
             modifiers: Modifiers::default(),
             keys: Bits::default(),
+            size,
         }
     }
 }
@@ -151,6 +155,9 @@ where
     }
     pub fn get(&self, val: T) -> bool {
         (self.0 & val.into()).count_ones() > 0
+    }
+    pub fn diff(&self, start: T, end: T) -> f32 {
+        self.get(end) as i8 as f32 - self.get(start) as i8 as f32
     }
 }
 

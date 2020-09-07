@@ -1,32 +1,56 @@
+use std::time::Instant;
+
 use glium::{glutin::*, *};
 use vector2math::*;
 
 pub use window::WindowId;
 
-use crate::{Drawer, Event, StateTracker};
+use crate::{Camera, Drawer, Event, StateTracker};
 
-pub struct Window {
-    display: Display,
-    program: Program,
-    pub state: StateTracker,
+pub trait App: Sized {
+    fn builder() -> WindowBuilder<Self> {
+        Window::builder()
+    }
 }
 
-impl Window {
-    pub fn builder() -> WindowBuilder {
+impl<T> App for T where T: Sized {}
+
+pub struct WindowInner {
+    display: Display,
+    update_timer: Instant,
+}
+
+pub struct Window<T> {
+    pub app: T,
+    pub program: Program,
+    pub tracker: StateTracker,
+    pub camera: Camera,
+    #[doc(hidden)]
+    pub inner: WindowInner,
+}
+
+impl<T> Window<T> {
+    pub fn builder() -> WindowBuilder<T> {
         WindowBuilder::default()
     }
     fn _window<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&window::Window) -> R,
     {
-        f(self.display.gl_window().window())
+        f(self.inner.display.gl_window().window())
     }
     fn draw<F>(&self, mut f: F)
     where
         F: FnMut(&mut Drawer<Frame, Display>),
     {
-        let mut frame = self.display.draw();
-        let mut drawer = Drawer::new(&mut frame, &self.display, &self.program);
+        let mut frame = self.inner.display.draw();
+        let mut drawer = Drawer::new(
+            &mut frame,
+            &self.inner.display,
+            &self.program,
+            self.camera,
+            self.tracker.size,
+        );
         f(&mut drawer);
         frame.finish().unwrap();
     }
@@ -34,30 +58,38 @@ impl Window {
 
 type Callback<F> = Option<Box<F>>;
 
-pub struct WindowBuilder {
+#[allow(clippy::type_complexity)]
+pub struct WindowBuilder<T> {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub startup: Callback<dyn FnOnce(Window) -> Window>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display>, &Window)>,
-    pub update: Callback<dyn Fn(Event, Window) -> Window>,
+    pub setup: Callback<dyn FnOnce(Window<T>) -> Window<T>>,
+    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display>, &Window<T>)>,
+    pub event: Callback<dyn Fn(Event, Window<T>) -> Window<T>>,
+    pub update: Callback<dyn Fn(f32, Window<T>) -> Window<T>>,
+    pub update_frequency: f32,
 }
 
-impl Default for WindowBuilder {
+impl<T> Default for WindowBuilder<T> {
     fn default() -> Self {
         WindowBuilder {
             title: env!("CARGO_CRATE_NAME").into(),
             size: [800.0; 2],
             automatic_close: true,
-            startup: None,
+            setup: None,
             draw: None,
+            event: None,
             update: None,
+            update_frequency: 120.0,
         }
     }
 }
 
-impl WindowBuilder {
-    pub fn run(mut self) -> crate::Result<()> {
+impl<T> WindowBuilder<T>
+where
+    T: 'static,
+{
+    pub fn run(mut self, app: T) -> crate::Result<()> {
         // Build event loop and display
         #[cfg(not(test))]
         let event_loop = event_loop::EventLoop::new();
@@ -76,12 +108,20 @@ impl WindowBuilder {
         let display = Display::new(wb, cb, &event_loop)?;
         let program = crate::default_shaders(&display);
         let window = Window {
-            display,
+            app,
+            inner: WindowInner {
+                display,
+                update_timer: Instant::now(),
+            },
             program,
-            state: StateTracker::default(),
+            tracker: StateTracker::new(self.size),
+            camera: Camera {
+                center: [0.0; 2],
+                zoom: 1.0,
+            },
         };
-        let mut take_window = Some(if let Some(startup) = self.startup.take() {
-            startup(window)
+        let mut take_window = Some(if let Some(setup) = self.setup.take() {
+            setup(window)
         } else {
             window
         });
@@ -89,19 +129,28 @@ impl WindowBuilder {
         event_loop.run(move |event, _, cf| {
             let mut window = take_window.take().unwrap();
             // Draw
-            if let event::Event::RedrawRequested(_) = &event {
+            if let event::Event::RedrawEventsCleared = &event {
                 if let Some(draw) = &self.draw {
                     window.draw(|drawer| draw(drawer, &window));
                 }
             }
-            // Update
-            for event in Event::from_glutin(event, &mut window.state) {
+            // Handle events
+            for event in Event::from_glutin(event, &mut window.tracker) {
                 if let (Event::CloseRequest, true) = (event, self.automatic_close) {
                     *cf = event_loop::ControlFlow::Exit;
                     break;
-                } else if let Some(update) = &self.update {
-                    window = update(event, window);
+                } else if let Some(handle_event) = &self.event {
+                    window = handle_event(event, window);
                 }
+            }
+            // Update
+            if let Some(update) = &self.update {
+                let now = Instant::now();
+                let dt = (now - window.inner.update_timer).as_secs_f32();
+                if dt >= 1.0 / self.update_frequency {
+                    window.inner.update_timer = now;
+                }
+                window = update(dt, window);
             }
             take_window = Some(window);
         })
@@ -130,27 +179,36 @@ impl WindowBuilder {
             ..self
         }
     }
-    pub fn startup<F>(self, f: F) -> Self
+    pub fn setup<F>(self, f: F) -> Self
     where
-        F: FnOnce(Window) -> Window + 'static,
+        F: FnOnce(Window<T>) -> Window<T> + 'static,
     {
         WindowBuilder {
-            startup: Some(Box::new(f)),
+            setup: Some(Box::new(f)),
             ..self
         }
     }
     pub fn draw<F>(self, f: F) -> Self
     where
-        F: Fn(&mut Drawer<Frame, Display>, &Window) + 'static,
+        F: Fn(&mut Drawer<Frame, Display>, &Window<T>) + 'static,
     {
         WindowBuilder {
             draw: Some(Box::new(f)),
             ..self
         }
     }
+    pub fn event<F>(self, f: F) -> Self
+    where
+        F: Fn(Event, Window<T>) -> Window<T> + 'static,
+    {
+        WindowBuilder {
+            event: Some(Box::new(f)),
+            ..self
+        }
+    }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(Event, Window) -> Window + 'static,
+        F: Fn(f32, Window<T>) -> Window<T> + 'static,
     {
         WindowBuilder {
             update: Some(Box::new(f)),
