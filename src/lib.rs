@@ -11,6 +11,8 @@ mod draw;
 pub use draw::*;
 mod color;
 pub use color::*;
+mod font;
+pub use font::*;
 
 pub use vector2math::{f32::*, *};
 
@@ -28,7 +30,7 @@ fn test() {
                     window
                         .tracker
                         .key_diff2(Key::A, Key::D, Key::S, Key::W)
-                        .mul(10.0 * dt),
+                        .mul(100.0 * dt),
                 ),
             },
             camera: window
@@ -38,12 +40,15 @@ fn test() {
                         window
                             .tracker
                             .key_diff2(Key::Left, Key::Right, Key::Down, Key::Up)
-                            .mul(10.0 * dt),
+                            .mul(100.0 * dt),
                     )
                 })
                 .map_zoom_on(
                     |zoom| {
-                        zoom.mul(1.1f32.powf(window.tracker.key_diff(Key::Minus, Key::Equals) * dt))
+                        zoom.mul(
+                            1.1f32
+                                .powf(window.tracker.key_diff(Key::Minus, Key::Equals) * dt * 10.0),
+                        )
                     },
                     window.camera.coords_to_pos(window.app.pos),
                 ),

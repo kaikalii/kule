@@ -166,8 +166,8 @@ where
                 let dt = (now - window.inner.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
                     window.inner.update_timer = now;
+                    window = update(dt, window);
                 }
-                window = update(dt, window);
             }
             take_window = Some(window);
         })
