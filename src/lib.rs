@@ -44,7 +44,10 @@ fn test() {
         .draw(|draw, window| {
             draw.clear(Col::black());
             let rect = Rect::centered(window.app.pos, [40.0; 2]);
-            draw.rectangle(Col::red(1.0), rect);
+            let mut recter = draw.rectangle(Col::red(1.0), rect);
+            recter.draw();
+            recter.offset([20.0; 2]).draw();
+            drop(recter);
             draw.circle([1.0, 0.5, 0.5], Circ::new(window.app.pos, 15.0), 32);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
             draw.character(Col::white(), 'g', 300.0, ());

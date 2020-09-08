@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::once};
+use std::{collections::HashMap, iter::once, rc::Rc};
 
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
@@ -269,9 +269,10 @@ where
     F: Facade,
 {
     drawer: &'b mut Drawer<'a, S, F, G>,
-    tys: Vec<DrawType>,
+    tys: Rc<Vec<DrawType>>,
     color: Col,
     drawn: bool,
+    offset: Vec2,
 }
 
 impl<'a, 'b, S, F, G> Transformable<'a, 'b, S, F, G>
@@ -279,15 +280,59 @@ where
     S: Surface,
     F: Facade,
 {
+    pub fn color<'c, C>(&'c mut self, color: C) -> Transformable<'a, 'c, S, F, G>
+    where
+        C: Color,
+    {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            tys: Rc::clone(&self.tys),
+            color: color.map(),
+            offset: self.offset,
+            drawn: false,
+        }
+    }
+    pub fn offset<'c, V>(&'c mut self, offset: V) -> Transformable<'a, 'c, S, F, G>
+    where
+        V: Vector2<Scalar = f32>,
+    {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            tys: Rc::clone(&self.tys),
+            color: self.color,
+            offset: self.offset.add(offset),
+            drawn: false,
+        }
+    }
+    pub fn draw(&mut self) {
+        for ty in &*self.tys {
+            let vertices = self.vertices(ty);
+            let indices = self.drawer.indices.get(ty, self.drawer.facade);
+            self.drawer
+                .surface
+                .draw(
+                    &vertices,
+                    indices,
+                    self.drawer.program,
+                    &uniforms(),
+                    &Default::default(),
+                )
+                .unwrap();
+        }
+        self.drawn = true;
+    }
     fn new<I>(drawer: &'b mut Drawer<'a, S, F, G>, color: Col, tys: I) -> Self
     where
         I: IntoIterator<Item = DrawType>,
     {
         Transformable {
             drawer,
+            tys: Rc::new(tys.into_iter().collect()),
             color,
+            offset: [0.0; 2],
             drawn: false,
-            tys: tys.into_iter().collect(),
         }
     }
     fn vertices(&self, ty: &DrawType) -> VertexBuffer<Vertex> {
@@ -365,26 +410,10 @@ where
             .unwrap(),
         };
         for v in &mut *vertices.map() {
+            v.pos = v.pos.add(self.offset);
             v.pos = self.drawer.camera.transform_point(v.pos);
         }
         vertices
-    }
-    pub fn draw(&mut self) {
-        for ty in &self.tys {
-            let vertices = self.vertices(ty);
-            let indices = self.drawer.indices.get(ty, self.drawer.facade);
-            self.drawer
-                .surface
-                .draw(
-                    &vertices,
-                    indices,
-                    self.drawer.program,
-                    &uniforms(),
-                    &Default::default(),
-                )
-                .unwrap();
-        }
-        self.drawn = true;
     }
 }
 
