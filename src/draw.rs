@@ -137,12 +137,7 @@ where
         C: Color,
         R: Rectangle<Scalar = f32>,
     {
-        Transformable {
-            drawer: self,
-            ty: DrawType::Rectangle(rect.map()),
-            color: color.map(),
-            drawn: false,
-        }
+        Transformable::new(self, color.map(), once(DrawType::Rectangle(rect.map())))
     }
     pub fn circle<C, R>(
         &mut self,
@@ -154,16 +149,15 @@ where
         C: Color,
         R: Circle<Scalar = f32>,
     {
-        Transformable {
-            drawer: self,
-            ty: DrawType::Ellipse {
+        Transformable::new(
+            self,
+            color.map(),
+            once(DrawType::Ellipse {
                 center: circ.center().map(),
                 radii: circ.radius().square(),
                 resolution,
-            },
-            color: color.map(),
-            drawn: false,
-        }
+            }),
+        )
     }
     pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'a, '_, S, F, G>
     where
@@ -171,12 +165,13 @@ where
         V: Vector2<Scalar = f32> + 'p,
         P: IntoIterator<Item = &'p V>,
     {
-        Transformable {
-            drawer: self,
-            ty: DrawType::Polygon(vertices.into_iter().map(|v| v.map()).collect()),
-            color: color.map(),
-            drawn: false,
-        }
+        Transformable::new(
+            self,
+            color.map(),
+            once(DrawType::Polygon(
+                vertices.into_iter().map(|v| v.map()).collect(),
+            )),
+        )
     }
     pub fn line<C, V>(
         &mut self,
@@ -196,6 +191,12 @@ where
             .mul(thickness / 2.0);
         self.polygon(color, &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)])
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AlphaVertex {
+    pos: Vec2,
+    alpha: f32,
 }
 
 impl<'a, S, F, G> Drawer<'a, S, F, G>
@@ -221,9 +222,9 @@ where
                 .zip(bytes)
                 .filter_map(|((i, j), &b)| {
                     if b > 0 {
-                        Some(Vertex {
+                        Some(AlphaVertex {
                             pos: [i as f32, j as f32],
-                            color: Col::white().with_alpha(b as f32 / 255.0),
+                            alpha: b as f32 / 255.0,
                         })
                     } else {
                         None
@@ -233,15 +234,14 @@ where
         } else {
             vec![]
         };
-        Transformable {
-            drawer: self,
-            ty: DrawType::Vertices {
+        Transformable::new(
+            self,
+            color.map(),
+            once(DrawType::AlphaVertices {
                 vertices,
                 primitive: index::PrimitiveType::Points,
-            },
-            color: color.map(),
-            drawn: false,
-        }
+            }),
+        )
     }
 }
 
@@ -257,6 +257,10 @@ enum DrawType {
         vertices: Vec<Vertex>,
         primitive: index::PrimitiveType,
     },
+    AlphaVertices {
+        vertices: Vec<AlphaVertex>,
+        primitive: index::PrimitiveType,
+    },
 }
 
 pub struct Transformable<'a, 'b, S, F, G>
@@ -265,7 +269,7 @@ where
     F: Facade,
 {
     drawer: &'b mut Drawer<'a, S, F, G>,
-    ty: DrawType,
+    tys: Vec<DrawType>,
     color: Col,
     drawn: bool,
 }
@@ -275,8 +279,19 @@ where
     S: Surface,
     F: Facade,
 {
-    fn vertices(&self) -> VertexBuffer<Vertex> {
-        let mut vertices = match self.ty {
+    fn new<I>(drawer: &'b mut Drawer<'a, S, F, G>, color: Col, tys: I) -> Self
+    where
+        I: IntoIterator<Item = DrawType>,
+    {
+        Transformable {
+            drawer,
+            color,
+            drawn: false,
+            tys: tys.into_iter().collect(),
+        }
+    }
+    fn vertices(&self, ty: &DrawType) -> VertexBuffer<Vertex> {
+        let mut vertices = match ty {
             DrawType::Rectangle(rect) => VertexBuffer::new(
                 self.drawer.facade,
                 &[
@@ -306,15 +321,15 @@ where
             } => VertexBuffer::new(
                 self.drawer.facade,
                 &once(Vertex {
-                    pos: center,
+                    pos: *center,
                     color: self.color,
                 })
-                .chain((0..resolution).map(|i| {
+                .chain((0..*resolution).map(|i| {
                     Vertex {
                         pos: center.add(
-                            (i as f32 / resolution as f32 * f32::tau())
+                            (i as f32 / *resolution as f32 * f32::tau())
                                 .angle_as_vector()
-                                .mul2(radii),
+                                .mul2(*radii),
                         ),
                         color: self.color,
                     }
@@ -333,13 +348,17 @@ where
                     .collect::<Vec<_>>(),
             )
             .unwrap(),
-            DrawType::Vertices { ref vertices, .. } => VertexBuffer::new(
+            DrawType::Vertices { ref vertices, .. } => {
+                VertexBuffer::new(self.drawer.facade, vertices).unwrap()
+            }
+            DrawType::AlphaVertices { ref vertices, .. } => VertexBuffer::new(
                 self.drawer.facade,
                 &vertices
                     .iter()
-                    .map(|&v| Vertex {
-                        pos: v.pos,
-                        color: v.color,
+                    .copied()
+                    .map(|AlphaVertex { pos, alpha }| Vertex {
+                        pos,
+                        color: self.color.with_alpha(alpha),
                     })
                     .collect::<Vec<_>>(),
             )
@@ -351,34 +370,20 @@ where
         vertices
     }
     pub fn draw(&mut self) {
-        let vertices = self.vertices();
-        let indices = match self.ty {
-            DrawType::Rectangle(_) => self.drawer.indices.rectangle(self.drawer.facade),
-            DrawType::Ellipse { resolution, .. } => {
-                self.drawer.indices.ellipse(resolution, self.drawer.facade)
-            }
-            DrawType::Polygon(ref vertices) => self
-                .drawer
-                .indices
-                .polygon(vertices.len() as u16, self.drawer.facade),
-            DrawType::Vertices {
-                ref vertices,
-                primitive,
-            } => self
-                .drawer
-                .indices
-                .vertices(vertices.len() as u16, primitive, self.drawer.facade),
-        };
-        self.drawer
-            .surface
-            .draw(
-                &vertices,
-                indices,
-                self.drawer.program,
-                &uniforms(),
-                &Default::default(),
-            )
-            .unwrap();
+        for ty in &self.tys {
+            let vertices = self.vertices(ty);
+            let indices = self.drawer.indices.get(ty, self.drawer.facade);
+            self.drawer
+                .surface
+                .draw(
+                    &vertices,
+                    indices,
+                    self.drawer.program,
+                    &uniforms(),
+                    &Default::default(),
+                )
+                .unwrap();
+        }
         self.drawn = true;
     }
 }
@@ -409,6 +414,24 @@ struct IndicesCache {
 }
 
 impl IndicesCache {
+    fn get<F>(&mut self, draw_type: &DrawType, facade: &F) -> &IndexBuffer<u16>
+    where
+        F: Facade,
+    {
+        match draw_type {
+            DrawType::Rectangle(_) => self.rectangle(facade),
+            DrawType::Ellipse { resolution, .. } => self.ellipse(*resolution, facade),
+            DrawType::Polygon(vertices) => self.polygon(vertices.len() as u16, facade),
+            DrawType::Vertices {
+                vertices,
+                primitive,
+            } => self.vertices(vertices.len() as u16, *primitive, facade),
+            DrawType::AlphaVertices {
+                vertices,
+                primitive,
+            } => self.vertices(vertices.len() as u16, *primitive, facade),
+        }
+    }
     fn rectangle<F>(&mut self, facade: &F) -> &IndexBuffer<u16>
     where
         F: Facade,
