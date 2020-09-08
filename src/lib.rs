@@ -14,7 +14,9 @@ pub use color::*;
 mod font;
 pub use font::*;
 
-pub use vector2math::{f32::*, *};
+pub use vector2math::{
+    f32::*, Circle, FloatingScalar, FloatingVector2, Rectangle, Scalar, Transform, Vector2,
+};
 
 #[cfg(test)]
 #[test]
@@ -46,7 +48,7 @@ fn test() {
             let rect = Rect::centered(window.app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             recter.draw();
-            recter.offset([20.0; 2]).draw();
+            recter.transform(|trans| trans.translate([20.0; 2])).draw();
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], Circ::new(window.app.pos, 15.0), 32);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);

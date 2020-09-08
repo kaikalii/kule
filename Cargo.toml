@@ -2,7 +2,7 @@
 fontdue = '0.2.4'
 glium = '0.27.0'
 thiserror = '1.0.20'
-vector2math = '0.9.0'
+vector2math = '0.10.0'
 
 [package]
 authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']

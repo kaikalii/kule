@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, rc::Rc};
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Fonts, Rect, Vec2};
+use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
@@ -60,10 +60,7 @@ impl Camera {
         let new_pos = new_cam.pos_to_coords(on);
         new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
     }
-    fn transform_point<V>(&self, p: V) -> V
-    where
-        V: Vector2<Scalar = f32>,
-    {
+    fn transform_point(&self, p: Vec2) -> Vec2 {
         p.sub(self.center)
             .mul2(self.zoom.mul2([1.0, -1.0]))
             .div2(self.window_size)
@@ -187,7 +184,7 @@ where
         let perp = b
             .sub(a)
             .unit()
-            .rotate_about([0.0; 2], f32::PI / 2.0)
+            .rotate_about(f32::TAU / 4.0, 0.0.square())
             .mul(thickness / 2.0);
         self.polygon(color, &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)])
     }
@@ -272,7 +269,7 @@ where
     tys: Rc<Vec<DrawType>>,
     color: Col,
     drawn: bool,
-    offset: Vec2,
+    transform: Trans,
 }
 
 impl<'a, 'b, S, F, G> Transformable<'a, 'b, S, F, G>
@@ -289,20 +286,20 @@ where
             drawer: self.drawer,
             tys: Rc::clone(&self.tys),
             color: color.map(),
-            offset: self.offset,
+            transform: Trans::new(),
             drawn: false,
         }
     }
-    pub fn offset<'c, V>(&'c mut self, offset: V) -> Transformable<'a, 'c, S, F, G>
+    pub fn transform<'c, D>(&'c mut self, transformation: D) -> Transformable<'a, 'c, S, F, G>
     where
-        V: Vector2<Scalar = f32>,
+        D: Fn(Trans) -> Trans,
     {
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
             tys: Rc::clone(&self.tys),
             color: self.color,
-            offset: self.offset.add(offset),
+            transform: transformation(self.transform),
             drawn: false,
         }
     }
@@ -331,7 +328,7 @@ where
             drawer,
             tys: Rc::new(tys.into_iter().collect()),
             color,
-            offset: [0.0; 2],
+            transform: Trans::new(),
             drawn: false,
         }
     }
@@ -372,7 +369,7 @@ where
                 .chain((0..*resolution).map(|i| {
                     Vertex {
                         pos: center.add(
-                            (i as f32 / *resolution as f32 * f32::tau())
+                            (i as f32 / *resolution as f32 * f32::TAU)
                                 .angle_as_vector()
                                 .mul2(*radii),
                         ),
@@ -410,7 +407,7 @@ where
             .unwrap(),
         };
         for v in &mut *vertices.map() {
-            v.pos = v.pos.add(self.offset);
+            v.pos = v.pos.transform(self.transform);
             v.pos = self.drawer.camera.transform_point(v.pos);
         }
         vertices
