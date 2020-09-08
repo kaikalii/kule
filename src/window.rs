@@ -103,6 +103,7 @@ pub struct WindowBuilder<T, G = ()> {
     pub event: Callback<dyn Fn(Event, Window<T, G>) -> Window<T, G>>,
     pub update: Callback<dyn Fn(f32, Window<T, G>) -> Window<T, G>>,
     pub update_frequency: f32,
+    pub samples: u16,
 }
 
 impl<T, G> Default for WindowBuilder<T, G> {
@@ -116,6 +117,7 @@ impl<T, G> Default for WindowBuilder<T, G> {
             event: None,
             update: None,
             update_frequency: 120.0,
+            samples: 0,
         }
     }
 }
@@ -140,7 +142,7 @@ where
         let wb = window::WindowBuilder::new()
             .with_title(&self.title)
             .with_inner_size(dpi::LogicalSize::new(self.size[0], self.size[1]));
-        let cb = ContextBuilder::new();
+        let cb = ContextBuilder::new().with_multisampling(self.samples);
         let display = Display::new(wb, cb, &event_loop)?;
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
@@ -217,6 +219,9 @@ where
             automatic_close,
             ..self
         }
+    }
+    pub fn samples(self, samples: u16) -> Self {
+        WindowBuilder { samples, ..self }
     }
     pub fn setup<F>(self, f: F) -> Self
     where
