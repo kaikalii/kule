@@ -23,6 +23,10 @@ fn test() {
         pos: Vec2,
     }
     App::builder()
+        .setup(|window| {
+            window.load_font((), include_bytes!("../examples/firacode.ttf").as_ref());
+            window
+        })
         .event(|_, window| window)
         .update(|dt, window| {
             let wasd = window.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
@@ -52,6 +56,7 @@ fn test() {
             draw.rectangle(Col::red(1.0), rect);
             draw.circle([1.0, 0.5, 0.5], Circ::new(window.app.pos, 15.0), 32);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
+            draw.character(Col::white(), 'g', 30.0, ());
         })
         .run(App { pos: [200.0; 2] })
         .unwrap();

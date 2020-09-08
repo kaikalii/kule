@@ -1,11 +1,11 @@
-use std::time::Instant;
+use std::{cell::RefCell, time::Instant};
 
 use glium::{glutin::*, *};
 use vector2math::*;
 
 pub use window::WindowId;
 
-use crate::{Camera, Drawer, Event, StateTracker, Vec2};
+use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
 
 pub trait App: Sized {
     fn builder() -> WindowBuilder<Self> {
@@ -20,17 +20,18 @@ pub struct WindowInner {
     update_timer: Instant,
 }
 
-pub struct Window<T> {
+pub struct Window<T, G = ()> {
     pub app: T,
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
+    pub glyphs: RefCell<Fonts<G>>,
     #[doc(hidden)]
     pub inner: WindowInner,
 }
 
-impl<T> Window<T> {
-    pub fn builder() -> WindowBuilder<T> {
+impl<T, G> Window<T, G> {
+    pub fn builder() -> WindowBuilder<T, G> {
         WindowBuilder::default()
     }
     pub fn app<F>(self, f: F) -> Self
@@ -62,30 +63,49 @@ impl<T> Window<T> {
     }
     fn draw<F>(&self, mut f: F)
     where
-        F: FnMut(&mut Drawer<Frame, Display>),
+        F: FnMut(&mut Drawer<Frame, Display, G>),
     {
         let mut frame = self.inner.display.draw();
-        let mut drawer = Drawer::new(&mut frame, &self.inner.display, &self.program, self.camera);
+        let mut glyphs = self.glyphs.borrow_mut();
+        let mut drawer = Drawer::new(
+            &mut frame,
+            &self.inner.display,
+            &self.program,
+            &mut *glyphs,
+            self.camera,
+        );
         f(&mut drawer);
         frame.finish().unwrap();
+    }
+}
+
+impl<T, G> Window<T, G>
+where
+    G: Eq + std::hash::Hash,
+{
+    pub fn load_font(&self, id: G, bytes: &[u8]) {
+        self.glyphs.borrow_mut().insert(
+            id,
+            GlyphCache::from(fontdue::Font::from_bytes(bytes, Default::default()).unwrap()),
+        );
     }
 }
 
 type Callback<F> = Option<Box<F>>;
 
 #[allow(clippy::type_complexity)]
-pub struct WindowBuilder<T> {
+pub struct WindowBuilder<T, G = ()> {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub setup: Callback<dyn FnOnce(Window<T>) -> Window<T>>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display>, &Window<T>)>,
-    pub event: Callback<dyn Fn(Event, Window<T>) -> Window<T>>,
-    pub update: Callback<dyn Fn(f32, Window<T>) -> Window<T>>,
+    pub setup: Callback<dyn FnOnce(Window<T, G>) -> Window<T, G>>,
+    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &Window<T, G>)>,
+    pub event: Callback<dyn Fn(Event, Window<T, G>) -> Window<T, G>>,
+    pub update: Callback<dyn Fn(f32, Window<T, G>) -> Window<T, G>>,
     pub update_frequency: f32,
 }
 
-impl<T> Default for WindowBuilder<T> {
+impl<T, G> Default for WindowBuilder<T, G> {
     fn default() -> Self {
         WindowBuilder {
             title: env!("CARGO_CRATE_NAME").into(),
@@ -100,9 +120,10 @@ impl<T> Default for WindowBuilder<T> {
     }
 }
 
-impl<T> WindowBuilder<T>
+impl<T, G> WindowBuilder<T, G>
 where
     T: 'static,
+    G: 'static,
 {
     pub fn run(mut self, app: T) -> crate::Result<()> {
         // Build event loop and display
@@ -130,6 +151,7 @@ where
                 update_timer: Instant::now(),
             },
             program,
+            glyphs: Default::default(),
             tracker: StateTracker::new(),
             camera: Camera {
                 center: [0.0; 2],
@@ -198,7 +220,7 @@ where
     }
     pub fn setup<F>(self, f: F) -> Self
     where
-        F: FnOnce(Window<T>) -> Window<T> + 'static,
+        F: FnOnce(Window<T, G>) -> Window<T, G> + 'static,
     {
         WindowBuilder {
             setup: Some(Box::new(f)),
@@ -207,7 +229,7 @@ where
     }
     pub fn draw<F>(self, f: F) -> Self
     where
-        F: Fn(&mut Drawer<Frame, Display>, &Window<T>) + 'static,
+        F: Fn(&mut Drawer<Frame, Display, G>, &Window<T, G>) + 'static,
     {
         WindowBuilder {
             draw: Some(Box::new(f)),
@@ -216,7 +238,7 @@ where
     }
     pub fn event<F>(self, f: F) -> Self
     where
-        F: Fn(Event, Window<T>) -> Window<T> + 'static,
+        F: Fn(Event, Window<T, G>) -> Window<T, G> + 'static,
     {
         WindowBuilder {
             event: Some(Box::new(f)),
@@ -225,7 +247,7 @@ where
     }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(f32, Window<T>) -> Window<T> + 'static,
+        F: Fn(f32, Window<T, G>) -> Window<T, G> + 'static,
     {
         WindowBuilder {
             update: Some(Box::new(f)),
