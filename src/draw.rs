@@ -60,24 +60,6 @@ impl Camera {
         let new_pos = new_cam.pos_to_coords(on);
         new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
     }
-    pub fn map_center<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Vec2) -> Vec2,
-    {
-        self.center(f(self.center))
-    }
-    pub fn map_zoom<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Vec2) -> Vec2,
-    {
-        self.zoom(f(self.zoom))
-    }
-    pub fn map_zoom_on<F>(self, f: F, on: Vec2) -> Self
-    where
-        F: FnOnce(Vec2) -> Vec2,
-    {
-        self.zoom_on(f(self.zoom), on)
-    }
     fn transform_point<V>(&self, p: V) -> V
     where
         V: Vector2<Scalar = f32>,
@@ -92,7 +74,7 @@ pub struct Drawer<'a, S, F, G> {
     surface: &'a mut S,
     facade: &'a F,
     program: &'a Program,
-    glyphs: &'a mut Fonts<G>,
+    fonts: &'a mut Fonts<G>,
     camera: Camera,
     indices: IndicesCache,
 }
@@ -106,14 +88,14 @@ where
         surface: &'a mut S,
         facade: &'a F,
         program: &'a Program,
-        glyphs: &'a mut Fonts<G>,
+        fonts: &'a mut Fonts<G>,
         camera: Camera,
     ) -> Self {
         Drawer {
             surface,
             facade,
             program,
-            glyphs,
+            fonts,
             camera,
             indices: Default::default(),
         }
@@ -232,8 +214,8 @@ where
     where
         C: Color,
     {
-        let points = if let Some(cache) = self.glyphs.get_mut(&font) {
-            let (metrics, bytes) = cache.rasterize(ch, size);
+        let points = if let Some(glyphs) = self.fonts.get(font) {
+            let (metrics, bytes) = glyphs.rasterize(ch, size);
             (0..metrics.height)
                 .flat_map(|j| (0..metrics.width).map(move |i| (i, j)))
                 .zip(bytes)

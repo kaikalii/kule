@@ -2,7 +2,31 @@ use std::{collections::HashMap, mem::transmute};
 
 use fontdue::*;
 
-pub(crate) type Fonts<G> = HashMap<G, GlyphCache>;
+pub struct Fonts<G>(HashMap<G, GlyphCache>);
+
+impl<G> Default for Fonts<G> {
+    fn default() -> Self {
+        Fonts(HashMap::default())
+    }
+}
+
+impl<G> Fonts<G>
+where
+    G: Eq + std::hash::Hash,
+{
+    pub fn load(&mut self, id: G, data: &[u8]) -> crate::Result<()> {
+        self.0.insert(
+            id,
+            Font::from_bytes(data, Default::default())
+                .map_err(crate::Error::Static)?
+                .into(),
+        );
+        Ok(())
+    }
+    pub fn get(&mut self, id: G) -> Option<&mut GlyphCache> {
+        self.0.get_mut(&id)
+    }
+}
 
 pub struct GlyphCache {
     font: Font,

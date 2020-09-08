@@ -100,8 +100,8 @@ impl Event {
 
 #[derive(Debug, Clone, Default)]
 pub struct StateTracker {
-    pub mouse_pos: Vec2,
-    pub modifiers: Modifiers,
+    mouse_pos: Vec2,
+    modifiers: Modifiers,
     keys: HashSet<Key>,
     mouse_buttons: HashSet<MouseButton>,
 }
@@ -109,6 +109,12 @@ pub struct StateTracker {
 impl StateTracker {
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn mouse_pos(&self) -> Vec2 {
+        self.mouse_pos
+    }
+    pub fn modifiers(&self) -> Modifiers {
+        self.modifiers
     }
     pub fn key(&self, key: Key) -> bool {
         self.keys.contains(&key)

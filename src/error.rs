@@ -4,6 +4,8 @@ pub enum Error {
     DisplayCreation(#[from] glium::backend::glutin::DisplayCreationError),
     #[error("{0}")]
     SwapBuffers(#[from] glium::SwapBuffersError),
+    #[error("{0}")]
+    Static(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

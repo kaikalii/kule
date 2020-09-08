@@ -5,7 +5,7 @@ use vector2math::*;
 
 pub use window::WindowId;
 
-use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
+use crate::{Camera, Drawer, Event, Fonts, StateTracker, Vec2};
 
 pub trait App: Sized {
     fn builder() -> WindowBuilder<Self> {
@@ -25,35 +25,16 @@ pub struct Window<T, G = ()> {
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
-    pub glyphs: RefCell<Fonts<G>>,
-    #[doc(hidden)]
-    pub inner: WindowInner,
+    glyphs: RefCell<Fonts<G>>,
+    inner: WindowInner,
 }
 
 impl<T, G> Window<T, G> {
     pub fn builder() -> WindowBuilder<T, G> {
         WindowBuilder::default()
     }
-    pub fn app<F>(self, f: F) -> Self
-    where
-        F: FnOnce(T) -> T,
-    {
-        Window {
-            app: f(self.app),
-            ..self
-        }
-    }
-    pub fn camera<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Camera) -> Camera,
-    {
-        Window {
-            camera: f(self.camera),
-            ..self
-        }
-    }
     pub fn mouse_coords(&self) -> Vec2 {
-        self.camera.pos_to_coords(self.tracker.mouse_pos)
+        self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
     fn _window<F, R>(&self, f: F) -> R
     where
@@ -83,11 +64,8 @@ impl<T, G> Window<T, G>
 where
     G: Eq + std::hash::Hash,
 {
-    pub fn load_font(&self, id: G, bytes: &[u8]) {
-        self.glyphs.borrow_mut().insert(
-            id,
-            GlyphCache::from(fontdue::Font::from_bytes(bytes, Default::default()).unwrap()),
-        );
+    pub fn load_font(&self, id: G, bytes: &[u8]) -> crate::Result<()> {
+        self.glyphs.borrow_mut().load(id, bytes)
     }
 }
 
@@ -98,10 +76,10 @@ pub struct WindowBuilder<T, G = ()> {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub setup: Callback<dyn FnOnce(Window<T, G>) -> Window<T, G>>,
+    pub setup: Callback<dyn FnOnce(&mut Window<T, G>)>,
     pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &Window<T, G>)>,
-    pub event: Callback<dyn Fn(Event, Window<T, G>) -> Window<T, G>>,
-    pub update: Callback<dyn Fn(f32, Window<T, G>) -> Window<T, G>>,
+    pub event: Callback<dyn Fn(Event, &mut Window<T, G>)>,
+    pub update: Callback<dyn Fn(f32, &mut Window<T, G>)>,
     pub update_frequency: f32,
     pub samples: u16,
 }
@@ -146,7 +124,7 @@ where
         let display = Display::new(wb, cb, &event_loop)?;
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
-        let window = Window {
+        let mut window = Window {
             app,
             inner: WindowInner {
                 display,
@@ -161,14 +139,11 @@ where
                 window_size: window_size.into(),
             },
         };
-        let mut take_window = Some(if let Some(setup) = self.setup.take() {
-            setup(window)
-        } else {
-            window
-        });
+        if let Some(setup) = self.setup.take() {
+            setup(&mut window)
+        }
         // Run the event loop
         event_loop.run(move |event, _, cf| {
-            let mut window = take_window.take().unwrap();
             // Draw
             if let event::Event::RedrawEventsCleared = &event {
                 if let Some(draw) = &self.draw {
@@ -181,7 +156,7 @@ where
                     *cf = event_loop::ControlFlow::Exit;
                     break;
                 } else if let Some(handle_event) = &self.event {
-                    window = handle_event(event, window);
+                    handle_event(event, &mut window);
                 }
             }
             // Update
@@ -190,10 +165,9 @@ where
                 let dt = (now - window.inner.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
                     window.inner.update_timer = now;
-                    window = update(dt, window);
+                    update(dt, &mut window);
                 }
             }
-            take_window = Some(window);
         })
     }
     pub fn title<S>(self, title: S) -> Self
@@ -225,7 +199,7 @@ where
     }
     pub fn setup<F>(self, f: F) -> Self
     where
-        F: FnOnce(Window<T, G>) -> Window<T, G> + 'static,
+        F: FnOnce(&mut Window<T, G>) + 'static,
     {
         WindowBuilder {
             setup: Some(Box::new(f)),
@@ -243,7 +217,7 @@ where
     }
     pub fn event<F>(self, f: F) -> Self
     where
-        F: Fn(Event, Window<T, G>) -> Window<T, G> + 'static,
+        F: Fn(Event, &mut Window<T, G>) + 'static,
     {
         WindowBuilder {
             event: Some(Box::new(f)),
@@ -252,7 +226,7 @@ where
     }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(f32, Window<T, G>) -> Window<T, G> + 'static,
+        F: Fn(f32, &mut Window<T, G>) + 'static,
     {
         WindowBuilder {
             update: Some(Box::new(f)),
