@@ -6,6 +6,8 @@ pub enum Error {
     SwapBuffers(#[from] glium::SwapBuffersError),
     #[error("{0}")]
     Static(&'static str),
+    #[error("{0}")]
+    BadIcon(#[from] glium::glutin::window::BadIcon),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

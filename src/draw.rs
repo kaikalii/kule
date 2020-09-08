@@ -214,7 +214,7 @@ where
     where
         C: Color,
     {
-        let points = if let Some(glyphs) = self.fonts.get(font) {
+        let vertices = if let Some(glyphs) = self.fonts.get(font) {
             let (metrics, bytes) = glyphs.rasterize(ch, size);
             (0..metrics.height)
                 .flat_map(|j| (0..metrics.width).map(move |i| (i, j)))
@@ -235,7 +235,10 @@ where
         };
         Transformable {
             drawer: self,
-            ty: DrawType::Text(points),
+            ty: DrawType::Vertices {
+                vertices,
+                primitive: index::PrimitiveType::Points,
+            },
             color: color.map(),
             drawn: false,
         }
@@ -250,7 +253,10 @@ enum DrawType {
         resolution: u16,
     },
     Polygon(Vec<Vec2>),
-    Text(Vec<Vertex>),
+    Vertices {
+        vertices: Vec<Vertex>,
+        primitive: index::PrimitiveType,
+    },
 }
 
 pub struct Transformable<'a, 'b, S, F, G>
@@ -327,7 +333,7 @@ where
                     .collect::<Vec<_>>(),
             )
             .unwrap(),
-            DrawType::Text(ref vertices) => VertexBuffer::new(
+            DrawType::Vertices { ref vertices, .. } => VertexBuffer::new(
                 self.drawer.facade,
                 &vertices
                     .iter()
@@ -355,10 +361,13 @@ where
                 .drawer
                 .indices
                 .polygon(vertices.len() as u16, self.drawer.facade),
-            DrawType::Text(ref points) => self
+            DrawType::Vertices {
+                ref vertices,
+                primitive,
+            } => self
                 .drawer
                 .indices
-                .points(points.len() as u16, self.drawer.facade),
+                .vertices(vertices.len() as u16, primitive, self.drawer.facade),
         };
         self.drawer
             .surface
@@ -449,19 +458,19 @@ impl IndicesCache {
                 .unwrap()
             })
     }
-    fn points<F>(&mut self, points: u16, facade: &F) -> &IndexBuffer<u16>
+    fn vertices<F>(
+        &mut self,
+        vertices: u16,
+        primitive: index::PrimitiveType,
+        facade: &F,
+    ) -> &IndexBuffer<u16>
     where
         F: Facade,
     {
         self.map
-            .entry(IndicesType::Points(points))
+            .entry(IndicesType::Points(vertices))
             .or_insert_with(|| {
-                IndexBuffer::new(
-                    facade,
-                    index::PrimitiveType::Points,
-                    &(0..points).collect::<Vec<_>>(),
-                )
-                .unwrap()
+                IndexBuffer::new(facade, primitive, &(0..vertices).collect::<Vec<_>>()).unwrap()
             })
     }
 }

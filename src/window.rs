@@ -36,7 +36,7 @@ impl<T, G> Window<T, G> {
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
-    fn _window<F, R>(&self, f: F) -> R
+    fn window<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&window::Window) -> R,
     {
@@ -57,6 +57,12 @@ impl<T, G> Window<T, G> {
         );
         f(&mut drawer);
         frame.finish().unwrap();
+    }
+    pub fn set_icon(&self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<()> {
+        self.window(|window| {
+            window.set_window_icon(Some(window::Icon::from_rgba(rgba, width, height)?));
+            Ok(())
+        })
     }
 }
 
@@ -82,6 +88,7 @@ pub struct WindowBuilder<T, G = ()> {
     pub update: Callback<dyn Fn(f32, &mut Window<T, G>)>,
     pub update_frequency: f32,
     pub samples: u16,
+    pub icon: Option<window::Icon>,
 }
 
 impl<T, G> Default for WindowBuilder<T, G> {
@@ -96,6 +103,7 @@ impl<T, G> Default for WindowBuilder<T, G> {
             update: None,
             update_frequency: 120.0,
             samples: 0,
+            icon: None,
         }
     }
 }
@@ -119,6 +127,7 @@ where
         };
         let wb = window::WindowBuilder::new()
             .with_title(&self.title)
+            .with_window_icon(self.icon.take())
             .with_inner_size(dpi::LogicalSize::new(self.size[0], self.size[1]));
         let cb = ContextBuilder::new().with_multisampling(self.samples);
         let display = Display::new(wb, cb, &event_loop)?;
@@ -196,6 +205,12 @@ where
     }
     pub fn samples(self, samples: u16) -> Self {
         WindowBuilder { samples, ..self }
+    }
+    pub fn icon(self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<Self> {
+        Ok(WindowBuilder {
+            icon: Some(window::Icon::from_rgba(rgba, width, height)?),
+            ..self
+        })
     }
     pub fn setup<F>(self, f: F) -> Self
     where
