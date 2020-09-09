@@ -62,10 +62,11 @@ impl Camera {
         let new_pos = new_cam.pos_to_coords(on);
         new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
     }
-    fn transform_point(&self, p: Vec2) -> Vec2 {
-        p.sub(self.center)
-            .mul2(self.zoom.mul2([1.0, -1.0]))
-            .div2(self.window_size)
+    fn transform(&self) -> Trans {
+        Trans::new()
+            .translate(self.center.neg())
+            .scale(self.zoom.mul2([1.0, -1.0]))
+            .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
     }
 }
 
@@ -325,6 +326,12 @@ enum DrawType {
     },
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Border {
+    color: Col,
+    thickness: f32,
+}
+
 pub struct Transformable<'a, 'b, S, F, G>
 where
     S: Surface,
@@ -335,6 +342,7 @@ where
     color: Col,
     drawn: bool,
     transform: Trans,
+    border: Option<Border>,
 }
 
 impl<'a, 'b, S, F, G> Transformable<'a, 'b, S, F, G>
@@ -352,6 +360,7 @@ where
             tys: Rc::clone(&self.tys),
             color: color.map(),
             transform: Trans::new(),
+            border: self.border,
             drawn: false,
         }
     }
@@ -365,12 +374,51 @@ where
             tys: Rc::clone(&self.tys),
             color: self.color,
             transform: transformation(self.transform),
+            border: self.border,
+            drawn: false,
+        }
+    }
+    pub fn border<'c, C>(&'c mut self, color: C, thickness: f32) -> Transformable<'a, 'c, S, F, G>
+    where
+        C: Color,
+    {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            tys: Rc::clone(&self.tys),
+            color: self.color,
+            transform: self.transform,
+            border: Some(Border {
+                color: color.map(),
+                thickness,
+            }),
+            drawn: false,
+        }
+    }
+    pub fn no_border<'c>(&'c mut self) -> Transformable<'a, 'c, S, F, G> {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            tys: Rc::clone(&self.tys),
+            color: self.color,
+            transform: self.transform,
+            border: None,
             drawn: false,
         }
     }
     pub fn draw(&mut self) {
+        let uniforms = uniforms();
+        let transform = self.drawer.camera.transform();
         for ty in &*self.tys {
-            let vertices = self.vertices(ty);
+            let mut vertices = self.unscaled_vertices(ty);
+            for v in &mut vertices {
+                v.pos = v.pos.transform(self.transform);
+            }
+            let border_vertices = self.border.as_ref().map(|_| vertices.clone());
+            for v in &mut vertices {
+                v.pos = v.pos.transform(transform);
+            }
+            let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
             let indices = self.drawer.indices.get(ty, self.drawer.facade);
             self.drawer
                 .surface
@@ -378,10 +426,60 @@ where
                     &vertices,
                     indices,
                     self.drawer.program,
-                    &uniforms(),
+                    &uniforms,
                     &Default::default(),
                 )
                 .unwrap();
+            if let Some((vertices, Border { color, thickness })) = border_vertices.zip(self.border)
+            {
+                if let Some(rect) = f32::Rect::bounding(vertices.iter().map(|v| v.pos)) {
+                    let len = vertices.len() as u16;
+                    let facade = self.drawer.facade;
+                    let indices =
+                        self.drawer
+                            .indices
+                            .get_or_insert(IndicesType::Border(len), || {
+                                IndexBuffer::new(
+                                    facade,
+                                    PrimitiveType::TriangleStrip,
+                                    &(0..(len * 2))
+                                        .chain(once(0))
+                                        .chain(once(1))
+                                        .collect::<Vec<_>>(),
+                                )
+                                .unwrap()
+                            });
+                    let center = rect.center();
+                    let radius = thickness / 2.0;
+                    let vertices = vertices
+                        .into_iter()
+                        .flat_map(|v| {
+                            let diff = v.pos.sub(center);
+                            let length = diff.mag();
+                            let unit = diff.unit();
+                            once(Vertex {
+                                pos: center.add(unit.mul(length + radius)).transform(transform),
+                                color,
+                            })
+                            .chain(once(Vertex {
+                                pos: center.add(unit.mul(length - radius)).transform(transform),
+                                color,
+                            }))
+                        })
+                        .collect::<Vec<_>>();
+                    let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
+                    self.drawer
+                        .surface
+                        .draw(
+                            &vertices,
+                            indices,
+                            self.drawer.program,
+                            &uniforms,
+                            &Default::default(),
+                        )
+                        .unwrap();
+                }
+            }
         }
         self.drawn = true;
     }
@@ -395,83 +493,61 @@ where
             color,
             transform: Trans::new(),
             drawn: false,
+            border: None,
         }
     }
-    fn vertices(&self, ty: &DrawType) -> VertexBuffer<Vertex> {
-        let mut vertices = match ty {
-            DrawType::Empty => VertexBuffer::new(self.drawer.facade, &[]).unwrap(),
-            DrawType::Rectangle(rect) => VertexBuffer::new(
-                self.drawer.facade,
-                &[
-                    Vertex {
-                        pos: rect.top_left(),
-                        color: self.color,
-                    },
-                    Vertex {
-                        pos: rect.top_right(),
-                        color: self.color,
-                    },
-                    Vertex {
-                        pos: rect.bottom_right(),
-                        color: self.color,
-                    },
-                    Vertex {
-                        pos: rect.bottom_left(),
-                        color: self.color,
-                    },
-                ],
-            )
-            .unwrap(),
+    fn unscaled_vertices(&self, ty: &DrawType) -> Vec<Vertex> {
+        match ty {
+            DrawType::Empty => Vec::new(),
+            DrawType::Rectangle(rect) => vec![
+                Vertex {
+                    pos: rect.top_left(),
+                    color: self.color,
+                },
+                Vertex {
+                    pos: rect.top_right(),
+                    color: self.color,
+                },
+                Vertex {
+                    pos: rect.bottom_right(),
+                    color: self.color,
+                },
+                Vertex {
+                    pos: rect.bottom_left(),
+                    color: self.color,
+                },
+            ],
             DrawType::Ellipse {
                 center,
                 radii,
                 resolution,
-            } => VertexBuffer::new(
-                self.drawer.facade,
-                &(0..*resolution)
-                    .map(|i| Vertex {
-                        pos: center.add(
-                            (i as f32 / *resolution as f32 * f32::TAU)
-                                .angle_as_vector()
-                                .mul2(*radii),
-                        ),
-                        color: self.color,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap(),
-            DrawType::Polygon(ref vertices) => VertexBuffer::new(
-                self.drawer.facade,
-                &vertices
-                    .iter()
-                    .map(|&v| Vertex {
-                        pos: v,
-                        color: self.color,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap(),
-            DrawType::Generic { ref vertices, .. } => {
-                VertexBuffer::new(self.drawer.facade, vertices).unwrap()
-            }
-            DrawType::Character { ref vertices, .. } => VertexBuffer::new(
-                self.drawer.facade,
-                &vertices
-                    .iter()
-                    .copied()
-                    .map(|AlphaVertex { pos, alpha }| Vertex {
-                        pos,
-                        color: self.color.with_alpha(alpha),
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap(),
-        };
-        for v in &mut *vertices.map() {
-            v.pos = v.pos.transform(self.transform);
-            v.pos = self.drawer.camera.transform_point(v.pos);
+            } => (0..*resolution)
+                .map(|i| Vertex {
+                    pos: center.add(
+                        (i as f32 / *resolution as f32 * f32::TAU)
+                            .angle_as_vector()
+                            .mul2(*radii),
+                    ),
+                    color: self.color,
+                })
+                .collect::<Vec<_>>(),
+            DrawType::Polygon(ref vertices) => vertices
+                .iter()
+                .map(|&v| Vertex {
+                    pos: v,
+                    color: self.color,
+                })
+                .collect::<Vec<_>>(),
+            DrawType::Generic { ref vertices, .. } => vertices.clone(),
+            DrawType::Character { ref vertices, .. } => vertices
+                .iter()
+                .copied()
+                .map(|AlphaVertex { pos, alpha }| Vertex {
+                    pos,
+                    color: self.color.with_alpha(alpha),
+                })
+                .collect::<Vec<_>>(),
         }
-        vertices
     }
 }
 
@@ -494,6 +570,7 @@ enum IndicesType {
     Ellipse(u16),
     Polygon(u16),
     Points(u16),
+    Border(u16),
 }
 
 #[derive(Default)]

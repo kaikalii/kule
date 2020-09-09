@@ -69,7 +69,8 @@ fn test() {
             recter.draw();
             recter.transform(rotate_about(1.0, ctx.app.pos)).draw();
             drop(recter);
-            draw.circle([1.0, 0.5, 0.5], Circ::new(ctx.app.pos, 15.0), 32);
+            draw.circle([1.0, 0.5, 0.5], (ctx.app.pos, 15.0), 32)
+                .border(Col::blue(1.0), 3.0);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 1.0);
             draw.line(Col::white(), [0.0; 2], [200.0, 0.0], 2.0);
             draw.text(Col::white(), "Hello!", 40.0, ());
