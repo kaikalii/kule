@@ -7,32 +7,21 @@ pub use window::WindowId;
 
 use crate::{Camera, Drawer, Event, Fonts, StateTracker, Vec2};
 
-pub trait App: Sized {
-    fn builder() -> WindowBuilder<Self> {
-        Window::builder()
-    }
-}
-
-impl<T> App for T where T: Sized {}
-
-pub struct WindowInner {
+pub struct ContextInner {
     display: Display,
     update_timer: Instant,
 }
 
-pub struct Window<T, G = ()> {
+pub struct Context<T, G = ()> {
     pub app: T,
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
     glyphs: RefCell<Fonts<G>>,
-    inner: WindowInner,
+    inner: ContextInner,
 }
 
-impl<T, G> Window<T, G> {
-    pub fn builder() -> WindowBuilder<T, G> {
-        WindowBuilder::default()
-    }
+impl<T, G> Context<T, G> {
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
@@ -66,7 +55,7 @@ impl<T, G> Window<T, G> {
     }
 }
 
-impl<T, G> Window<T, G>
+impl<T, G> Context<T, G>
 where
     G: Eq + std::hash::Hash,
 {
@@ -78,22 +67,22 @@ where
 type Callback<F> = Option<Box<F>>;
 
 #[allow(clippy::type_complexity)]
-pub struct WindowBuilder<T, G = ()> {
+pub struct AppBuilder<T, G = ()> {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub setup: Callback<dyn FnOnce(&mut Window<T, G>)>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &Window<T, G>)>,
-    pub event: Callback<dyn Fn(Event, &mut Window<T, G>)>,
-    pub update: Callback<dyn Fn(f32, &mut Window<T, G>)>,
+    pub setup: Callback<dyn FnOnce(&mut Context<T, G>)>,
+    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &Context<T, G>)>,
+    pub event: Callback<dyn Fn(Event, &mut Context<T, G>)>,
+    pub update: Callback<dyn Fn(f32, &mut Context<T, G>)>,
     pub update_frequency: f32,
     pub samples: u16,
     pub icon: Option<window::Icon>,
 }
 
-impl<T, G> Default for WindowBuilder<T, G> {
+impl<T, G> Default for AppBuilder<T, G> {
     fn default() -> Self {
-        WindowBuilder {
+        AppBuilder {
             title: env!("CARGO_CRATE_NAME").into(),
             size: [800.0; 2],
             automatic_close: true,
@@ -108,11 +97,14 @@ impl<T, G> Default for WindowBuilder<T, G> {
     }
 }
 
-impl<T, G> WindowBuilder<T, G>
+impl<T, G> AppBuilder<T, G>
 where
     T: 'static,
     G: 'static,
 {
+    pub fn new() -> Self {
+        AppBuilder::default()
+    }
     pub fn run(mut self, app: T) -> crate::Result<()> {
         // Build event loop and display
         #[cfg(not(test))]
@@ -133,9 +125,9 @@ where
         let display = Display::new(wb, cb, &event_loop)?;
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
-        let mut window = Window {
+        let mut window = Context {
             app,
-            inner: WindowInner {
+            inner: ContextInner {
                 display,
                 update_timer: Instant::now(),
             },
@@ -183,7 +175,7 @@ where
     where
         S: Into<String>,
     {
-        WindowBuilder {
+        AppBuilder {
             title: title.into(),
             ..self
         }
@@ -192,58 +184,58 @@ where
     where
         V: Vector2<Scalar = f32>,
     {
-        WindowBuilder {
+        AppBuilder {
             size: size.map(),
             ..self
         }
     }
     pub fn automatic_close(self, automatic_close: bool) -> Self {
-        WindowBuilder {
+        AppBuilder {
             automatic_close,
             ..self
         }
     }
     pub fn samples(self, samples: u16) -> Self {
-        WindowBuilder { samples, ..self }
+        AppBuilder { samples, ..self }
     }
     pub fn icon(self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<Self> {
-        Ok(WindowBuilder {
+        Ok(AppBuilder {
             icon: Some(window::Icon::from_rgba(rgba, width, height)?),
             ..self
         })
     }
     pub fn setup<F>(self, f: F) -> Self
     where
-        F: FnOnce(&mut Window<T, G>) + 'static,
+        F: FnOnce(&mut Context<T, G>) + 'static,
     {
-        WindowBuilder {
+        AppBuilder {
             setup: Some(Box::new(f)),
             ..self
         }
     }
     pub fn draw<F>(self, f: F) -> Self
     where
-        F: Fn(&mut Drawer<Frame, Display, G>, &Window<T, G>) + 'static,
+        F: Fn(&mut Drawer<Frame, Display, G>, &Context<T, G>) + 'static,
     {
-        WindowBuilder {
+        AppBuilder {
             draw: Some(Box::new(f)),
             ..self
         }
     }
     pub fn event<F>(self, f: F) -> Self
     where
-        F: Fn(Event, &mut Window<T, G>) + 'static,
+        F: Fn(Event, &mut Context<T, G>) + 'static,
     {
-        WindowBuilder {
+        AppBuilder {
             event: Some(Box::new(f)),
             ..self
         }
     }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(f32, &mut Window<T, G>) + 'static,
+        F: Fn(f32, &mut Context<T, G>) + 'static,
     {
-        WindowBuilder {
+        AppBuilder {
             update: Some(Box::new(f)),
             ..self
         }

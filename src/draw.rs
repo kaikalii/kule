@@ -5,6 +5,8 @@ use vector2math::*;
 
 use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
 
+pub use index::PrimitiveType;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
     pub pos: Vec2,
@@ -170,6 +172,23 @@ where
             )),
         )
     }
+    pub fn vertices<P>(
+        &mut self,
+        primitive: PrimitiveType,
+        vertices: P,
+    ) -> Transformable<'a, '_, S, F, G>
+    where
+        P: IntoIterator<Item = Vertex>,
+    {
+        Transformable::new(
+            self,
+            [1.0; 4],
+            once(DrawType::Vertices {
+                vertices: vertices.into_iter().collect(),
+                primitive,
+            }),
+        )
+    }
     pub fn line<C, V>(
         &mut self,
         color: C,
@@ -236,7 +255,7 @@ where
             color.map(),
             once(DrawType::AlphaVertices {
                 vertices,
-                primitive: index::PrimitiveType::Points,
+                primitive: PrimitiveType::Points,
             }),
         )
     }
@@ -252,11 +271,11 @@ enum DrawType {
     Polygon(Vec<Vec2>),
     Vertices {
         vertices: Vec<Vertex>,
-        primitive: index::PrimitiveType,
+        primitive: PrimitiveType,
     },
     AlphaVertices {
         vertices: Vec<AlphaVertex>,
-        primitive: index::PrimitiveType,
+        primitive: PrimitiveType,
     },
 }
 
@@ -463,12 +482,7 @@ impl IndicesCache {
         F: Facade,
     {
         self.map.entry(IndicesType::Rectangle).or_insert_with(|| {
-            IndexBuffer::new(
-                facade,
-                index::PrimitiveType::TrianglesList,
-                &[0, 1, 2, 2, 3, 0],
-            )
-            .unwrap()
+            IndexBuffer::new(facade, PrimitiveType::TrianglesList, &[0, 1, 2, 2, 3, 0]).unwrap()
         })
     }
     fn ellipse<F>(&mut self, resolution: u16, facade: &F) -> &IndexBuffer<u16>
@@ -480,7 +494,7 @@ impl IndicesCache {
             .or_insert_with(|| {
                 IndexBuffer::new(
                     facade,
-                    index::PrimitiveType::TrianglesList,
+                    PrimitiveType::TrianglesList,
                     &(1..resolution)
                         .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
                         .chain(once(0).chain(once(resolution)).chain(once(1)))
@@ -498,7 +512,7 @@ impl IndicesCache {
             .or_insert_with(|| {
                 IndexBuffer::new(
                     facade,
-                    index::PrimitiveType::TrianglesList,
+                    PrimitiveType::TrianglesList,
                     &(1..(vertices - 2))
                         .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
                         .chain(once(0).chain(once(vertices - 2)).chain(once(vertices - 1)))
@@ -510,7 +524,7 @@ impl IndicesCache {
     fn vertices<F>(
         &mut self,
         vertices: u16,
-        primitive: index::PrimitiveType,
+        primitive: PrimitiveType,
         facade: &F,
     ) -> &IndexBuffer<u16>
     where

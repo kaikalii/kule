@@ -1,7 +1,7 @@
 #![allow(clippy::single_match)]
 
-mod window;
-pub use window::*;
+mod context;
+pub use context::*;
 mod error;
 pub use error::*;
 mod event;
@@ -44,33 +44,32 @@ fn test() {
     struct App {
         pos: Vec2,
     }
-    App::builder()
-        .setup(|window| {
-            window
-                .load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
+    AppBuilder::<App>::new()
+        .setup(|ctx| {
+            ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap()
         })
-        .update(|dt, window| {
-            let wasd = window.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
-            let arrows = window
+        .update(|dt, ctx| {
+            let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
+            let arrows = ctx
                 .tracker
                 .key_diff2(Key::Left, Key::Right, Key::Up, Key::Down);
-            let plus_minus = window.tracker.key_diff(Key::Minus, Key::Equals);
-            window.app.pos.add_assign(wasd.mul(100.0 * dt));
-            window.camera.center.add_assign(arrows.mul(100.0 * dt));
-            window.camera = window.camera.zoom_on(
-                window.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)),
-                window.camera.coords_to_pos(window.app.pos),
+            let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
+            ctx.app.pos.add_assign(wasd.mul(100.0 * dt));
+            ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
+            ctx.camera = ctx.camera.zoom_on(
+                ctx.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)),
+                ctx.camera.coords_to_pos(ctx.app.pos),
             );
         })
-        .draw(|draw, window| {
+        .draw(|draw, ctx| {
             draw.clear(Col::black());
-            let rect = Rect::centered(window.app.pos, [40.0; 2]);
+            let rect = Rect::centered(ctx.app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             recter.draw();
-            recter.transform(rotate_about(1.0, window.app.pos)).draw();
+            recter.transform(rotate_about(1.0, ctx.app.pos)).draw();
             drop(recter);
-            draw.circle([1.0, 0.5, 0.5], Circ::new(window.app.pos, 15.0), 32);
+            draw.circle([1.0, 0.5, 0.5], Circ::new(ctx.app.pos, 15.0), 32);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
             draw.character(Col::white(), 'g', 40.0, ());
         })
