@@ -223,25 +223,51 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphSize {
+    pub resolution: u32,
+    pub scale: f32,
+}
+
+impl GlyphSize {
+    pub fn new(scale: f32) -> Self {
+        GlyphSize {
+            resolution: 100,
+            scale,
+        }
+    }
+    pub fn resolution(self, resolution: u32) -> Self {
+        GlyphSize { resolution, ..self }
+    }
+}
+
+impl From<f32> for GlyphSize {
+    fn from(scale: f32) -> Self {
+        GlyphSize::new(scale)
+    }
+}
+
 impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
 where
     S: Surface,
     F: Facade,
     G: Copy + Eq + std::hash::Hash,
 {
-    pub fn character<'drawer, C>(
+    pub fn character<'drawer, C, L>(
         &'drawer mut self,
         color: C,
         ch: char,
-        size: f32,
+        size: L,
         font: G,
     ) -> Transformable<'ctx, 'drawer, S, F, G>
     where
         C: Color,
+        L: Into<GlyphSize>,
     {
         let color: Col = color.map();
+        let size = size.into();
         if let Some(glyphs) = self.fonts.get(font) {
-            let glyph = glyphs.glyph(ch, size).1.clone();
+            let glyph = glyphs.glyph(ch, size.resolution).1.clone();
             Transformable::new(
                 self,
                 color,
@@ -249,30 +275,32 @@ where
                     vertices: glyph.vertices,
                     indices: glyph.indices,
                     ch,
-                    size,
+                    resolution: size.resolution,
                 }),
             )
         } else {
             Transformable::new(self, color, once(DrawType::Empty))
         }
     }
-    pub fn text<C>(
+    pub fn text<C, L>(
         &mut self,
         color: C,
         string: &str,
-        size: f32,
+        size: L,
         font: G,
     ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
+        L: Into<GlyphSize>,
     {
         use fontdue::layout::*;
         let color: Col = color.map();
+        let size = size.into();
         if let Some(glyphs) = self.fonts.get(font) {
             let mut gps = Vec::new();
             Layout::new().layout_horizontal(
                 &[glyphs.font()],
-                &[&TextStyle::new(string, size, 0)],
+                &[&TextStyle::new(string, size.resolution as f32, 0)],
                 &LayoutSettings {
                     ..Default::default()
                 },
@@ -281,13 +309,13 @@ where
             let buffers: Vec<_> = gps
                 .into_iter()
                 .map(|gp| {
-                    let (_, glyph) = glyphs.glyph(gp.key.c, size);
+                    let (metrics, glyph) = glyphs.glyph(gp.key.c, size.resolution);
+                    let offset = [
+                        gp.x,
+                        gp.y - (metrics.bounds.ymax - metrics.bounds.ymin) as f32,
+                    ];
                     (
-                        glyph
-                            .vertices
-                            .iter()
-                            .map(|v| v.add([gp.x, gp.y + size]))
-                            .collect(),
+                        glyph.vertices.iter().map(|v| v.add(offset)).collect(),
                         glyph.indices.clone(),
                         gp.key.c,
                     )
@@ -302,7 +330,7 @@ where
                         vertices,
                         indices,
                         ch,
-                        size,
+                        resolution: size.resolution,
                     }),
             )
         } else {
@@ -328,7 +356,7 @@ enum DrawType {
         vertices: Vec<Vec2>,
         indices: Rc<Vec<u16>>,
         ch: char,
-        size: f32,
+        resolution: u32,
     },
 }
 
@@ -583,7 +611,7 @@ enum IndicesType {
     Ellipse(u16),
     Polygon(u16),
     Border(u16),
-    Character { ch: char, size_u32: u32 },
+    Character { ch: char, resolution: u32 },
 }
 
 #[derive(Default)]
@@ -637,11 +665,14 @@ impl IndicesCache {
             }
             DrawType::Generic { indices, .. } => indices,
             DrawType::Character {
-                indices, ch, size, ..
+                indices,
+                ch,
+                resolution,
+                ..
             } => self.get_or_insert(
                 IndicesType::Character {
                     ch: *ch,
-                    size_u32: unsafe { std::mem::transmute(*size) },
+                    resolution: *resolution,
                 },
                 || IndexBuffer::new(facade, PrimitiveType::TrianglesList, indices).unwrap(),
             ),
