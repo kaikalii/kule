@@ -45,6 +45,9 @@ impl From<Font> for GlyphCache {
 }
 
 impl GlyphCache {
+    pub fn font(&self) -> &Font {
+        &self.font
+    }
     #[allow(clippy::transmute_float_to_int)]
     pub(crate) fn rasterize(&mut self, ch: char, size: f32) -> &(Metrics, Vec<u8>) {
         let size_u32: u32 = unsafe { transmute(size) };

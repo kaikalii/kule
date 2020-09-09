@@ -47,7 +47,8 @@ fn test() {
     AppBuilder::<App>::new()
         .setup(|ctx| {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
-                .unwrap()
+                .unwrap();
+            ctx.camera.zoom = [3.0; 2];
         })
         .update(|dt, ctx| {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
@@ -72,8 +73,8 @@ fn test() {
             draw.circle([1.0, 0.5, 0.5], (ctx.app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 1.0);
-            draw.line(Col::white(), [0.0; 2], [200.0, 0.0], 2.0);
-            draw.text(Col::white(), "Hello!", 40.0, ());
+            draw.text(Col::white(), "Hello World! akfj sldkfj sldkfj slkdfjl sdkfjdlkjf slkdjf slkdfj sldkjflskd jflskdj flskfj", 100.0, ())
+                .transform(zoom(0.4));
         })
         .run(App { pos: [0.0; 2] })
         .unwrap();

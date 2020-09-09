@@ -281,19 +281,20 @@ where
     where
         C: Color,
     {
+        use fontdue::layout::*;
         if let Some(glyphs) = self.fonts.get(font) {
-            let vertices: Vec<_> = string
-                .chars()
-                .scan(0.0, |x_offset, ch| {
-                    let width = glyphs.metrics(ch, size).bounds.xmax;
-                    *x_offset += width;
-                    Some(character_vertices(
-                        ch,
-                        size,
-                        [*x_offset - width, 0.0],
-                        glyphs,
-                    ))
-                })
+            let mut gps = Vec::new();
+            Layout::new().layout_horizontal(
+                &[glyphs.font()],
+                &[&TextStyle::new(string, size, 0)],
+                &LayoutSettings {
+                    ..Default::default()
+                },
+                &mut gps,
+            );
+            let vertices: Vec<_> = gps
+                .into_iter()
+                .map(|gp| character_vertices(gp.key.c, size, [gp.x, gp.y + size], glyphs))
                 .collect();
             Transformable::new(
                 self,
