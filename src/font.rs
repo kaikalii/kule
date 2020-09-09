@@ -2,6 +2,8 @@ use std::{collections::HashMap, mem::transmute};
 
 use fontdue::*;
 
+pub use fontdue::Metrics;
+
 pub struct Fonts<G>(HashMap<G, GlyphCache>);
 
 impl<G> Default for Fonts<G> {
@@ -50,5 +52,8 @@ impl GlyphCache {
         self.raster
             .entry((ch, size_u32))
             .or_insert_with(|| font.rasterize(ch, size))
+    }
+    pub fn metrics(&mut self, ch: char, size: f32) -> &Metrics {
+        &self.rasterize(ch, size).0
     }
 }

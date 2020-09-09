@@ -1,11 +1,14 @@
-use std::{cell::RefCell, time::Instant};
+use std::{
+    cell::{RefCell, RefMut},
+    time::Instant,
+};
 
 use glium::{glutin::*, *};
 use vector2math::*;
 
 pub use window::WindowId;
 
-use crate::{Camera, Drawer, Event, Fonts, StateTracker, Vec2};
+use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
 
 pub struct ContextInner {
     display: Display,
@@ -17,7 +20,7 @@ pub struct Context<T, G = ()> {
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
-    glyphs: RefCell<Fonts<G>>,
+    fonts: RefCell<Fonts<G>>,
     inner: ContextInner,
 }
 
@@ -36,12 +39,12 @@ impl<T, G> Context<T, G> {
         F: FnMut(&mut Drawer<Frame, Display, G>),
     {
         let mut frame = self.inner.display.draw();
-        let mut glyphs = self.glyphs.borrow_mut();
+        let mut fonts = self.fonts.borrow_mut();
         let mut drawer = Drawer::new(
             &mut frame,
             &self.inner.display,
             &self.program,
-            &mut *glyphs,
+            &mut *fonts,
             self.camera,
         );
         f(&mut drawer);
@@ -57,10 +60,31 @@ impl<T, G> Context<T, G> {
 
 impl<T, G> Context<T, G>
 where
-    G: Eq + std::hash::Hash,
+    G: Copy + Eq + std::hash::Hash + std::fmt::Debug,
 {
-    pub fn load_font(&self, id: G, bytes: &[u8]) -> crate::Result<()> {
-        self.glyphs.borrow_mut().load(id, bytes)
+    pub fn load_font(&self, font_id: G, bytes: &[u8]) -> crate::Result<()> {
+        self.fonts.borrow_mut().load(font_id, bytes)
+    }
+    pub fn glyphs(&self, font_id: G) -> RefMut<GlyphCache> {
+        RefMut::map(self.fonts.borrow_mut(), |fonts| fonts.get(font_id).unwrap())
+    }
+    pub fn get_glyphs(&self, font_id: G) -> Option<RefMut<GlyphCache>> {
+        if self.fonts.borrow_mut().get(font_id).is_some() {
+            Some(RefMut::map(self.fonts.borrow_mut(), |fonts| {
+                fonts.get(font_id).unwrap()
+            }))
+        } else {
+            None
+        }
+    }
+}
+
+impl<T> Context<T> {
+    pub fn load_only_font(&self, bytes: &[u8]) -> crate::Result<()> {
+        self.load_font((), bytes)
+    }
+    pub fn only_glyphs(&self) -> RefMut<GlyphCache> {
+        self.glyphs(())
     }
 }
 
@@ -132,7 +156,7 @@ where
                 update_timer: Instant::now(),
             },
             program,
-            glyphs: Default::default(),
+            fonts: Default::default(),
             tracker: StateTracker::new(),
             camera: Camera {
                 center: [0.0; 2],
