@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, rc::Rc};
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
+use crate::{Col, Color, Fonts, GlyphCache, Rect, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
@@ -215,11 +215,34 @@ struct AlphaVertex {
     alpha: f32,
 }
 
+fn character_vertices(
+    ch: char,
+    size: f32,
+    offset: Vec2,
+    glyphs: &mut GlyphCache,
+) -> Vec<AlphaVertex> {
+    let (metrics, bytes) = glyphs.rasterize(ch, size);
+    (0..metrics.height)
+        .flat_map(|j| (0..metrics.width).map(move |i| (i, j)))
+        .zip(bytes)
+        .filter_map(|((i, j), &b)| {
+            if b > 0 {
+                Some(AlphaVertex {
+                    pos: [i as f32, j as f32 - metrics.bounds.ymax].add(offset),
+                    alpha: b as f32 / 255.0,
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 impl<'a, S, F, G> Drawer<'a, S, F, G>
 where
     S: Surface,
     F: Facade,
-    G: Eq + std::hash::Hash,
+    G: Copy + Eq + std::hash::Hash,
 {
     pub fn character<C>(
         &mut self,
@@ -231,37 +254,62 @@ where
     where
         C: Color,
     {
-        let vertices = if let Some(glyphs) = self.fonts.get(font) {
-            let (metrics, bytes) = glyphs.rasterize(ch, size);
-            (0..metrics.height)
-                .flat_map(|j| (0..metrics.width).map(move |i| (i, j)))
-                .zip(bytes)
-                .filter_map(|((i, j), &b)| {
-                    if b > 0 {
-                        Some(AlphaVertex {
-                            pos: [i as f32, j as f32],
-                            alpha: b as f32 / 255.0,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect()
+        if let Some(glyphs) = self.fonts.get(font) {
+            let vertices = character_vertices(ch, size, [0.0; 2], glyphs);
+            Transformable::new(
+                self,
+                color.map(),
+                once(DrawType::AlphaVertices {
+                    vertices,
+                    primitive: PrimitiveType::Points,
+                }),
+            )
         } else {
-            vec![]
-        };
-        Transformable::new(
-            self,
-            color.map(),
-            once(DrawType::AlphaVertices {
-                vertices,
-                primitive: PrimitiveType::Points,
-            }),
-        )
+            Transformable::new(self, color.map(), once(DrawType::Empty))
+        }
+    }
+    pub fn text<C>(
+        &mut self,
+        color: C,
+        string: &str,
+        size: f32,
+        font: G,
+    ) -> Transformable<'a, '_, S, F, G>
+    where
+        C: Color,
+    {
+        if let Some(glyphs) = self.fonts.get(font) {
+            let vertices: Vec<_> = string
+                .chars()
+                .scan(0.0, |x_offset, ch| {
+                    let width = glyphs.metrics(ch, size).bounds.xmax;
+                    *x_offset += width;
+                    Some(character_vertices(
+                        ch,
+                        size,
+                        [*x_offset - width, 0.0],
+                        glyphs,
+                    ))
+                })
+                .collect();
+            Transformable::new(
+                self,
+                color.map(),
+                vertices
+                    .into_iter()
+                    .map(|vertices| DrawType::AlphaVertices {
+                        vertices,
+                        primitive: PrimitiveType::Points,
+                    }),
+            )
+        } else {
+            Transformable::new(self, color.map(), once(DrawType::Empty))
+        }
     }
 }
 
 enum DrawType {
+    Empty,
     Rectangle(Rect),
     Ellipse {
         center: Vec2,
@@ -353,6 +401,7 @@ where
     }
     fn vertices(&self, ty: &DrawType) -> VertexBuffer<Vertex> {
         let mut vertices = match ty {
+            DrawType::Empty => VertexBuffer::new(self.drawer.facade, &[]).unwrap(),
             DrawType::Rectangle(rect) => VertexBuffer::new(
                 self.drawer.facade,
                 &[
@@ -447,6 +496,7 @@ where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum IndicesType {
+    Empty,
     Rectangle,
     Ellipse(u16),
     Polygon(u16),
@@ -464,7 +514,12 @@ impl IndicesCache {
         F: Facade,
     {
         match draw_type {
-            DrawType::Rectangle(_) => self.rectangle(facade),
+            DrawType::Empty => self.get_or_insert(IndicesType::Empty, || {
+                IndexBuffer::empty(facade, PrimitiveType::Points, 0).unwrap()
+            }),
+            DrawType::Rectangle(_) => self.get_or_insert(IndicesType::Rectangle, || {
+                IndexBuffer::new(facade, PrimitiveType::TrianglesList, &[0, 1, 2, 2, 3, 0]).unwrap()
+            }),
             DrawType::Ellipse { resolution, .. } => self.ellipse(*resolution, facade),
             DrawType::Polygon(vertices) => self.polygon(vertices.len() as u16, facade),
             DrawType::Vertices {
@@ -477,13 +532,11 @@ impl IndicesCache {
             } => self.vertices(vertices.len() as u16, *primitive, facade),
         }
     }
-    fn rectangle<F>(&mut self, facade: &F) -> &IndexBuffer<u16>
+    fn get_or_insert<G>(&mut self, it: IndicesType, g: G) -> &IndexBuffer<u16>
     where
-        F: Facade,
+        G: FnMut() -> IndexBuffer<u16>,
     {
-        self.map.entry(IndicesType::Rectangle).or_insert_with(|| {
-            IndexBuffer::new(facade, PrimitiveType::TrianglesList, &[0, 1, 2, 2, 3, 0]).unwrap()
-        })
+        self.map.entry(it).or_insert_with(g)
     }
     fn ellipse<F>(&mut self, resolution: u16, facade: &F) -> &IndexBuffer<u16>
     where
