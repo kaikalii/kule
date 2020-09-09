@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, rc::Rc};
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Fonts, GlyphCache, Rect, Trans, Vec2};
+use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
@@ -70,25 +70,25 @@ impl Camera {
     }
 }
 
-pub struct Drawer<'a, S, F, G> {
-    surface: &'a mut S,
-    facade: &'a F,
-    program: &'a Program,
-    fonts: &'a mut Fonts<G>,
+pub struct Drawer<'ctx, S, F, G> {
+    surface: &'ctx mut S,
+    facade: &'ctx F,
+    program: &'ctx Program,
+    fonts: &'ctx mut Fonts<G>,
     camera: Camera,
     indices: IndicesCache,
 }
 
-impl<'a, S, F, G> Drawer<'a, S, F, G>
+impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
 where
     S: Surface,
     F: Facade,
 {
     pub(crate) fn new(
-        surface: &'a mut S,
-        facade: &'a F,
-        program: &'a Program,
-        fonts: &'a mut Fonts<G>,
+        surface: &'ctx mut S,
+        facade: &'ctx F,
+        program: &'ctx Program,
+        fonts: &'ctx mut Fonts<G>,
         camera: Camera,
     ) -> Self {
         Drawer {
@@ -132,7 +132,7 @@ where
         self.surface
             .clear_color(color.r(), color.g(), color.b(), color.alpha())
     }
-    pub fn rectangle<C, R>(&mut self, color: C, rect: R) -> Transformable<'a, '_, S, F, G>
+    pub fn rectangle<C, R>(&mut self, color: C, rect: R) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
         R: Rectangle<Scalar = f32>,
@@ -144,7 +144,7 @@ where
         color: C,
         circ: R,
         resolution: u16,
-    ) -> Transformable<'a, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
         R: Circle<Scalar = f32>,
@@ -159,7 +159,11 @@ where
             }),
         )
     }
-    pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'a, '_, S, F, G>
+    pub fn polygon<'p, C, V, P>(
+        &mut self,
+        color: C,
+        vertices: P,
+    ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
         V: Vector2<Scalar = f32> + 'p,
@@ -178,7 +182,7 @@ where
         primitive: PrimitiveType,
         vertices: V,
         indices: I,
-    ) -> Transformable<'a, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, S, F, G>
     where
         V: IntoIterator<Item = Vertex>,
         I: IntoIterator<Item = u16>,
@@ -205,7 +209,7 @@ where
         a: V,
         b: V,
         thickness: f32,
-    ) -> Transformable<'a, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
         V: Vector2<Scalar = f32>,
@@ -219,56 +223,37 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct AlphaVertex {
-    pos: Vec2,
-    alpha: f32,
-}
-
-fn character_vertices(
-    ch: char,
-    size: f32,
-    offset: Vec2,
-    glyphs: &mut GlyphCache,
-) -> Vec<AlphaVertex> {
-    let (metrics, bytes) = glyphs.rasterize(ch, size);
-    (0..metrics.height)
-        .flat_map(|j| (0..metrics.width).map(move |i| (i, j)))
-        .zip(bytes)
-        .filter_map(|((i, j), &b)| {
-            if b > 0 {
-                Some(AlphaVertex {
-                    pos: [i as f32, j as f32 - metrics.bounds.ymax].add(offset),
-                    alpha: b as f32 / 255.0,
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-impl<'a, S, F, G> Drawer<'a, S, F, G>
+impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
 where
     S: Surface,
     F: Facade,
     G: Copy + Eq + std::hash::Hash,
 {
-    pub fn character<C>(
-        &mut self,
+    pub fn character<'drawer, C>(
+        &'drawer mut self,
         color: C,
         ch: char,
         size: f32,
         font: G,
-    ) -> Transformable<'a, '_, S, F, G>
+    ) -> Transformable<'ctx, 'drawer, S, F, G>
     where
         C: Color,
     {
+        let color: Col = color.map();
         if let Some(glyphs) = self.fonts.get(font) {
-            let vertices = character_vertices(ch, size, [0.0; 2], glyphs);
-            Transformable::new(self, color.map(), once(DrawType::Character { vertices }))
+            let glyph = glyphs.glyph(ch, size).1.clone();
+            Transformable::new(
+                self,
+                color,
+                once(DrawType::Character {
+                    vertices: glyph.vertices,
+                    indices: glyph.indices,
+                    ch,
+                    size,
+                }),
+            )
         } else {
-            Transformable::new(self, color.map(), once(DrawType::Empty))
+            Transformable::new(self, color, once(DrawType::Empty))
         }
     }
     pub fn text<C>(
@@ -277,11 +262,12 @@ where
         string: &str,
         size: f32,
         font: G,
-    ) -> Transformable<'a, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
     {
         use fontdue::layout::*;
+        let color: Col = color.map();
         if let Some(glyphs) = self.fonts.get(font) {
             let mut gps = Vec::new();
             Layout::new().layout_horizontal(
@@ -292,19 +278,35 @@ where
                 },
                 &mut gps,
             );
-            let vertices: Vec<_> = gps
+            let buffers: Vec<_> = gps
                 .into_iter()
-                .map(|gp| character_vertices(gp.key.c, size, [gp.x, gp.y + size], glyphs))
+                .map(|gp| {
+                    let (_, glyph) = glyphs.glyph(gp.key.c, size);
+                    (
+                        glyph
+                            .vertices
+                            .iter()
+                            .map(|v| v.add([gp.x, gp.y + size]))
+                            .collect(),
+                        glyph.indices.clone(),
+                        gp.key.c,
+                    )
+                })
                 .collect();
             Transformable::new(
                 self,
-                color.map(),
-                vertices
+                color,
+                buffers
                     .into_iter()
-                    .map(|vertices| DrawType::Character { vertices }),
+                    .map(|(vertices, indices, ch)| DrawType::Character {
+                        vertices,
+                        indices,
+                        ch,
+                        size,
+                    }),
             )
         } else {
-            Transformable::new(self, color.map(), once(DrawType::Empty))
+            Transformable::new(self, color, once(DrawType::Empty))
         }
     }
 }
@@ -323,7 +325,10 @@ enum DrawType {
         indices: Box<IndexBuffer<u16>>,
     },
     Character {
-        vertices: Vec<AlphaVertex>,
+        vertices: Vec<Vec2>,
+        indices: Rc<Vec<u16>>,
+        ch: char,
+        size: f32,
     },
 }
 
@@ -333,12 +338,12 @@ struct Border {
     thickness: f32,
 }
 
-pub struct Transformable<'a, 'b, S, F, G>
+pub struct Transformable<'ctx, 'drawer, S, F, G>
 where
     S: Surface,
     F: Facade,
 {
-    drawer: &'b mut Drawer<'a, S, F, G>,
+    drawer: &'drawer mut Drawer<'ctx, S, F, G>,
     tys: Rc<Vec<DrawType>>,
     color: Col,
     drawn: bool,
@@ -346,12 +351,12 @@ where
     border: Option<Border>,
 }
 
-impl<'a, 'b, S, F, G> Transformable<'a, 'b, S, F, G>
+impl<'ctx, 'drawer, S, F, G> Transformable<'ctx, 'drawer, S, F, G>
 where
     S: Surface,
     F: Facade,
 {
-    pub fn color<'c, C>(&'c mut self, color: C) -> Transformable<'a, 'c, S, F, G>
+    pub fn color<'tfbl, C>(&'tfbl mut self, color: C) -> Transformable<'ctx, 'tfbl, S, F, G>
     where
         C: Color,
     {
@@ -365,7 +370,10 @@ where
             drawn: false,
         }
     }
-    pub fn transform<'c, D>(&'c mut self, transformation: D) -> Transformable<'a, 'c, S, F, G>
+    pub fn transform<'tfbl, D>(
+        &'tfbl mut self,
+        transformation: D,
+    ) -> Transformable<'ctx, 'tfbl, S, F, G>
     where
         D: Fn(Trans) -> Trans,
     {
@@ -379,7 +387,11 @@ where
             drawn: false,
         }
     }
-    pub fn border<'c, C>(&'c mut self, color: C, thickness: f32) -> Transformable<'a, 'c, S, F, G>
+    pub fn border<'tfbl, C>(
+        &'tfbl mut self,
+        color: C,
+        thickness: f32,
+    ) -> Transformable<'ctx, 'tfbl, S, F, G>
     where
         C: Color,
     {
@@ -396,7 +408,7 @@ where
             drawn: false,
         }
     }
-    pub fn no_border<'c>(&'c mut self) -> Transformable<'a, 'c, S, F, G> {
+    pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, S, F, G> {
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
@@ -484,7 +496,7 @@ where
         }
         self.drawn = true;
     }
-    fn new<I>(drawer: &'b mut Drawer<'a, S, F, G>, color: Col, tys: I) -> Self
+    fn new<I>(drawer: &'drawer mut Drawer<'ctx, S, F, G>, color: Col, tys: I) -> Self
     where
         I: IntoIterator<Item = DrawType>,
     {
@@ -540,19 +552,19 @@ where
                 })
                 .collect::<Vec<_>>(),
             DrawType::Generic { ref vertices, .. } => vertices.clone(),
-            DrawType::Character { ref vertices, .. } => vertices
+            DrawType::Character { vertices, .. } => vertices
                 .iter()
                 .copied()
-                .map(|AlphaVertex { pos, alpha }| Vertex {
+                .map(|pos| Vertex {
                     pos,
-                    color: self.color.with_alpha(alpha),
+                    color: self.color,
                 })
                 .collect::<Vec<_>>(),
         }
     }
 }
 
-impl<'a, 'b, S, F, G> Drop for Transformable<'a, 'b, S, F, G>
+impl<'ctx, 'drawer, S, F, G> Drop for Transformable<'ctx, 'drawer, S, F, G>
 where
     S: Surface,
     F: Facade,
@@ -570,8 +582,8 @@ enum IndicesType {
     Rectangle,
     Ellipse(u16),
     Polygon(u16),
-    Points(u16),
     Border(u16),
+    Character { ch: char, size_u32: u32 },
 }
 
 #[derive(Default)]
@@ -580,7 +592,8 @@ struct IndicesCache {
 }
 
 impl IndicesCache {
-    fn get<'a, F>(&'a mut self, draw_type: &'a DrawType, facade: &F) -> &'a IndexBuffer<u16>
+    #[allow(clippy::transmute_float_to_int)]
+    fn get<'ctx, F>(&'ctx mut self, draw_type: &'ctx DrawType, facade: &F) -> &'ctx IndexBuffer<u16>
     where
         F: Facade,
     {
@@ -623,16 +636,15 @@ impl IndicesCache {
                 })
             }
             DrawType::Generic { indices, .. } => indices,
-            DrawType::Character { vertices } => {
-                self.get_or_insert(IndicesType::Points(vertices.len() as u16), || {
-                    IndexBuffer::new(
-                        facade,
-                        PrimitiveType::Points,
-                        &(0..(vertices.len() as u16)).collect::<Vec<_>>(),
-                    )
-                    .unwrap()
-                })
-            }
+            DrawType::Character {
+                indices, ch, size, ..
+            } => self.get_or_insert(
+                IndicesType::Character {
+                    ch: *ch,
+                    size_u32: unsafe { std::mem::transmute(*size) },
+                },
+                || IndexBuffer::new(facade, PrimitiveType::TrianglesList, indices).unwrap(),
+            ),
         }
     }
     fn get_or_insert<G>(&mut self, it: IndicesType, g: G) -> &IndexBuffer<u16>

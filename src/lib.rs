@@ -58,10 +58,9 @@ fn test() {
             let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
             ctx.app.pos.add_assign(wasd.mul(100.0 * dt));
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
-            ctx.camera = ctx.camera.zoom_on(
-                ctx.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)),
-                ctx.camera.coords_to_pos(ctx.app.pos),
-            );
+            ctx.camera = ctx
+                .camera
+                .zoom(ctx.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)));
         })
         .draw(|draw, ctx| {
             draw.clear(Col::black());
@@ -73,7 +72,7 @@ fn test() {
             draw.circle([1.0, 0.5, 0.5], (ctx.app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
             draw.line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 1.0);
-            draw.text(Col::white(), "Hello World! akfj sldkfj sldkfj slkdfjl sdkfjdlkjf slkdjf slkdfj sldkjflskd jflskdj flskfj", 100.0, ())
+            draw.text(Col::white(), "Hello", 100.0, ())
                 .transform(zoom(0.4));
         })
         .run(App { pos: [0.0; 2] })
