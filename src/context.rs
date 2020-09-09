@@ -10,18 +10,14 @@ pub use window::WindowId;
 
 use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
 
-pub struct ContextInner {
-    display: Display,
-    update_timer: Instant,
-}
-
 pub struct Context<T, G = ()> {
     pub app: T,
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
     fonts: RefCell<Fonts<G>>,
-    inner: ContextInner,
+    display: Display,
+    update_timer: Instant,
 }
 
 impl<T, G> Context<T, G> {
@@ -32,17 +28,17 @@ impl<T, G> Context<T, G> {
     where
         F: FnOnce(&window::Window) -> R,
     {
-        f(self.inner.display.gl_window().window())
+        f(self.display.gl_window().window())
     }
     fn draw<F>(&self, mut f: F)
     where
         F: FnMut(&mut Drawer<Frame, Display, G>),
     {
-        let mut frame = self.inner.display.draw();
+        let mut frame = self.display.draw();
         let mut fonts = self.fonts.borrow_mut();
         let mut drawer = Drawer::new(
             &mut frame,
-            &self.inner.display,
+            &self.display,
             &self.program,
             &mut *fonts,
             self.camera,
@@ -90,6 +86,7 @@ impl<T> Context<T> {
 
 type Callback<F> = Option<Box<F>>;
 
+/// The primary structure for defining your app's behavior
 #[allow(clippy::type_complexity)]
 pub struct AppBuilder<T, G = ()> {
     pub title: String,
@@ -151,10 +148,6 @@ where
         let program = crate::default_shaders(&display);
         let mut window = Context {
             app,
-            inner: ContextInner {
-                display,
-                update_timer: Instant::now(),
-            },
             program,
             fonts: Default::default(),
             tracker: StateTracker::new(),
@@ -163,6 +156,8 @@ where
                 zoom: [1.0; 2],
                 window_size: window_size.into(),
             },
+            display,
+            update_timer: Instant::now(),
         };
         if let Some(setup) = self.setup.take() {
             setup(&mut window)
@@ -187,9 +182,9 @@ where
             // Update
             if let Some(update) = &self.update {
                 let now = Instant::now();
-                let dt = (now - window.inner.update_timer).as_secs_f32();
+                let dt = (now - window.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
-                    window.inner.update_timer = now;
+                    window.update_timer = now;
                     update(dt, &mut window);
                 }
             }
