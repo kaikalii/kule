@@ -15,7 +15,7 @@ mod font;
 pub use font::*;
 
 pub use vector2math::{
-    f32::*, Circle, FloatingScalar, FloatingVector2, Rectangle, Scalar, Transform, Vector2,
+    f32::*, Circle, FloatingScalar, FloatingVector2, Pair, Rectangle, Scalar, Transform, Vector2,
 };
 
 pub fn translate(offset: Vec2) -> impl Fn(Trans) -> Trans {
@@ -71,8 +71,8 @@ fn test() {
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
-            draw.round_line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
-            draw.line(Col::white(), [-200.0, 0.0], [300.0, 0.0], 1.0);
+            draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
+            draw.line(Col::white(), ([-200.0, 0.0], [300.0, 0.0]), 1.0);
             draw.text(Col::white(), "Wow, pretty good!", 20.0, ())
                 .transform(translate([-200.0, 0.0]));
         })

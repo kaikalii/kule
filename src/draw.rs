@@ -84,6 +84,8 @@ pub struct Drawer<'ctx, S, F, G> {
     indices: IndicesCache,
 }
 
+pub type WindowDrawer<'ctx, G = ()> = Drawer<'ctx, Frame, Display, G>;
+
 impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
 where
     S: Surface,
@@ -208,17 +210,20 @@ where
             }),
         )
     }
-    pub fn line<C, V>(
+    pub fn line<C, P>(
         &mut self,
         color: C,
-        a: V,
-        b: V,
+        endpoints: P,
         thickness: f32,
     ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
-        V: Vector2<Scalar = f32>,
+        P: Pair,
+        P::Item: Vector2<Scalar = f32>,
     {
+        let (a, b) = endpoints.to_pair();
+        let a: Vec2 = a.map();
+        let b: Vec2 = b.map();
         let perp = b
             .sub(a)
             .unit()
@@ -263,18 +268,19 @@ where
     S: Surface,
     F: Facade,
 {
-    pub fn round_line<C, V, L>(
+    pub fn round_line<C, P, L>(
         &mut self,
         color: C,
-        a: V,
-        b: V,
+        endpoints: P,
         rl: L,
     ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
-        V: Vector2<Scalar = f32>,
+        P: Pair,
+        P::Item: Vector2<Scalar = f32>,
         L: Into<RoundLine>,
     {
+        let (a, b) = endpoints.to_pair();
         let a: Vec2 = a.map();
         let b: Vec2 = b.map();
         let rl = rl.into();
