@@ -1,22 +1,61 @@
 use std::{
-    cell::{RefCell, RefMut},
+    cell::{Ref, RefCell, RefMut},
     time::Instant,
 };
 
 use glium::{glutin::*, *};
 use vector2math::*;
 
-pub use window::WindowId;
+pub use monitor::MonitorHandle;
+pub use window::{Fullscreen, WindowId};
 
 use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
+
+pub struct Window(Display);
+
+impl Window {
+    pub fn inner(&self) -> Ref<window::Window> {
+        Ref::map(self.0.gl_window(), |gl_window| gl_window.window())
+    }
+    pub fn position(&self) -> [i32; 2] {
+        let pos = self.inner().outer_position().unwrap();
+        [pos.x, pos.y]
+    }
+    pub fn set_position(&self, pos: [i32; 2]) {
+        self.inner()
+            .set_outer_position(dpi::PhysicalPosition::<i32>::from(pos));
+    }
+    pub fn current_monitor(&self) -> MonitorHandle {
+        self.inner().current_monitor()
+    }
+    pub fn set_fullscreen(&self, fullscreen: Option<Fullscreen>) {
+        self.inner().set_fullscreen(fullscreen)
+    }
+    pub fn size(&self) -> [u32; 2] {
+        let size = self.inner().inner_size();
+        [size.width, size.height]
+    }
+    pub fn set_size(&self, size: [u32; 2]) {
+        self.inner()
+            .set_inner_size(dpi::PhysicalSize::<u32>::from(size));
+    }
+    pub fn set_cursor_visible(&self, visible: bool) {
+        self.inner().set_cursor_visible(visible);
+    }
+    pub fn set_icon(&self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<()> {
+        self.inner()
+            .set_window_icon(Some(window::Icon::from_rgba(rgba, width, height)?));
+        Ok(())
+    }
+}
 
 pub struct Context<T, G = ()> {
     pub app: T,
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
+    pub window: Window,
     fonts: RefCell<Fonts<G>>,
-    display: Display,
     update_timer: Instant,
 }
 
@@ -24,33 +63,21 @@ impl<T, G> Context<T, G> {
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
-    fn window<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&window::Window) -> R,
-    {
-        f(self.display.gl_window().window())
-    }
     fn draw<F>(&self, mut f: F)
     where
         F: FnMut(&mut Drawer<Frame, Display, G>),
     {
-        let mut frame = self.display.draw();
+        let mut frame = self.window.0.draw();
         let mut fonts = self.fonts.borrow_mut();
         let mut drawer = Drawer::new(
             &mut frame,
-            &self.display,
+            &self.window.0,
             &self.program,
             &mut *fonts,
             self.camera,
         );
         f(&mut drawer);
         frame.finish().unwrap();
-    }
-    pub fn set_icon(&self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<()> {
-        self.window(|window| {
-            window.set_window_icon(Some(window::Icon::from_rgba(rgba, width, height)?));
-            Ok(())
-        })
     }
 }
 
@@ -146,7 +173,7 @@ where
         let display = Display::new(wb, cb, &event_loop)?;
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
-        let mut window = Context {
+        let mut ctx = Context {
             app,
             program,
             fonts: Default::default(),
@@ -156,36 +183,36 @@ where
                 zoom: [1.0; 2],
                 window_size: window_size.into(),
             },
-            display,
+            window: Window(display),
             update_timer: Instant::now(),
         };
         if let Some(setup) = self.setup.take() {
-            setup(&mut window)
+            setup(&mut ctx)
         }
         // Run the event loop
         event_loop.run(move |event, _, cf| {
             // Draw
             if let event::Event::RedrawEventsCleared = &event {
                 if let Some(draw) = &self.draw {
-                    window.draw(|drawer| draw(drawer, &window));
+                    ctx.draw(|drawer| draw(drawer, &ctx));
                 }
             }
             // Handle events
-            for event in Event::from_glutin(event, &mut window.tracker, &mut window.camera) {
+            for event in Event::from_glutin(event, &mut ctx.tracker, &mut ctx.camera) {
                 if let (Event::CloseRequest, true) = (event, self.automatic_close) {
                     *cf = event_loop::ControlFlow::Exit;
                     break;
                 } else if let Some(handle_event) = &self.event {
-                    handle_event(event, &mut window);
+                    handle_event(event, &mut ctx);
                 }
             }
             // Update
             if let Some(update) = &self.update {
                 let now = Instant::now();
-                let dt = (now - window.update_timer).as_secs_f32();
+                let dt = (now - ctx.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
-                    window.update_timer = now;
-                    update(dt, &mut window);
+                    ctx.update_timer = now;
+                    update(dt, &mut ctx);
                 }
             }
         })
