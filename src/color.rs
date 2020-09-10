@@ -83,6 +83,12 @@ pub trait Color: Copy {
             f(self.alpha(), other.alpha()),
         )
     }
+    fn lerp<C>(self, other: C, t: f32) -> Self
+    where
+        C: Color,
+    {
+        self.map_all_other(other, |a, b| a.lerp(b, t))
+    }
     fn min<C>(self, other: C) -> Self
     where
         C: Color,
