@@ -114,6 +114,7 @@ pub struct AppBuilder<T, G = ()> {
     pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>)>,
     pub event: Callback<dyn Fn(Event, &mut T, &mut Context<G>)>,
     pub update: Callback<dyn Fn(f32, &mut T, &mut Context<G>)>,
+    pub teardown: Callback<dyn Fn(&mut T, &mut Context<G>)>,
     pub update_frequency: f32,
     pub samples: u16,
     pub icon: Option<window::Icon>,
@@ -129,6 +130,7 @@ impl<T, G> Default for AppBuilder<T, G> {
             draw: None,
             event: None,
             update: None,
+            teardown: None,
             update_frequency: 120.0,
             samples: 0,
             icon: None,
@@ -196,6 +198,9 @@ where
             for event in Event::from_glutin(event, &mut ctx.tracker, &mut ctx.camera) {
                 if let (Event::CloseRequest, true) = (event, self.automatic_close) {
                     *cf = event_loop::ControlFlow::Exit;
+                    if let Some(teardown) = &self.teardown {
+                        teardown(&mut app, &mut ctx);
+                    }
                     break;
                 } else if let Some(handle_event) = &self.event {
                     handle_event(event, &mut app, &mut ctx);
@@ -278,6 +283,15 @@ where
     {
         AppBuilder {
             update: Some(Box::new(f)),
+            ..self
+        }
+    }
+    pub fn teardown<F>(self, f: F) -> Self
+    where
+        F: Fn(&mut T, &mut Context<G>) + 'static,
+    {
+        AppBuilder {
+            teardown: Some(Box::new(f)),
             ..self
         }
     }
