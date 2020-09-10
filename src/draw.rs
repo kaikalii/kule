@@ -278,7 +278,7 @@ pub struct RoundLine {
     /// The thickness of the line
     pub thickness: f32,
     /// The resolution of the circle formed by each rounded end
-    pub resolution: u32,
+    pub resolution: u16,
 }
 
 impl RoundLine {
@@ -291,7 +291,7 @@ impl RoundLine {
         }
     }
     /// Set the `resolution`
-    pub const fn resolution(self, resolution: u32) -> Self {
+    pub const fn resolution(self, resolution: u16) -> Self {
         RoundLine { resolution, ..self }
     }
 }

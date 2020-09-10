@@ -115,7 +115,7 @@ pub struct AppBuilder<T, G = ()> {
     pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>)>,
     pub event: Callback<dyn Fn(Event, &mut T, &mut Context<G>)>,
     pub update: Callback<dyn Fn(f32, &mut T, &mut Context<G>)>,
-    pub teardown: Callback<dyn Fn(&mut T, &mut Context<G>)>,
+    pub teardown: Callback<dyn Fn(T, &mut Context<G>)>,
     pub update_frequency: f32,
     pub samples: u16,
     pub icon: Option<window::Icon>,
@@ -184,6 +184,7 @@ where
         if let Some(setup) = self.setup.take() {
             setup(&mut app, &mut ctx)
         }
+        let mut app = Some(app);
         // Run the event loop
         event_loop.run(move |event, _, cf| {
             // Draw
@@ -193,7 +194,9 @@ where
                     let dt = (now - ctx.fps_timer).as_secs_f32();
                     ctx.fps_timer = now;
                     ctx.tracker.fps = ctx.tracker.fps.lerp(1.0 / dt, 0.1);
-                    ctx.draw(|drawer| draw(drawer, &app, &ctx));
+                    if let Some(app) = &app {
+                        ctx.draw(|drawer| draw(drawer, app, &ctx));
+                    }
                 }
             }
             // Handle events
@@ -202,11 +205,15 @@ where
                 if automatic_close || ctx.should_close {
                     *cf = event_loop::ControlFlow::Exit;
                     if let Some(teardown) = &self.teardown {
-                        teardown(&mut app, &mut ctx);
+                        if let Some(app) = app.take() {
+                            teardown(app, &mut ctx);
+                        }
                     }
                     break;
                 } else if let Some(handle_event) = &self.event {
-                    handle_event(event, &mut app, &mut ctx);
+                    if let Some(app) = &mut app {
+                        handle_event(event, app, &mut ctx);
+                    }
                 }
             }
             // Update
@@ -215,7 +222,9 @@ where
                 let dt = (now - ctx.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
                     ctx.update_timer = now;
-                    update(dt, &mut app, &mut ctx);
+                    if let Some(app) = &mut app {
+                        update(dt, app, &mut ctx);
+                    }
                 }
             }
         })
@@ -291,7 +300,7 @@ where
     }
     pub fn teardown<F>(self, f: F) -> Self
     where
-        F: Fn(&mut T, &mut Context<G>) + 'static,
+        F: Fn(T, &mut Context<G>) + 'static,
     {
         AppBuilder {
             teardown: Some(Box::new(f)),

@@ -41,6 +41,7 @@ pub fn rotate_about(radians: f32, pivot: Vec2) -> impl Fn(Trans) -> Trans {
 #[cfg(test)]
 #[test]
 fn test() {
+    #[derive(Debug)]
     struct App {
         pos: Vec2,
     }
@@ -85,6 +86,9 @@ fn test() {
             );
             draw.text(Col::white(), text, font_size)
                 .transform(translate([text_left, 0.0]));
+        })
+        .teardown(|app, _| {
+            println!("{:?}", app);
         })
         .run(App { pos: [0.0; 2] })
         .unwrap();
