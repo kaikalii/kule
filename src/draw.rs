@@ -175,16 +175,14 @@ where
     ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
-        E: Pair,
-        E::Item: Vector2<Scalar = f32>,
+        E: Rectangle<Scalar = f32>,
     {
-        let (center, radii) = ellip.to_pair();
         Transformable::new(
             self,
             color.map(),
             once(DrawType::Ellipse {
-                center: center.map(),
-                radii: radii.map(),
+                center: ellip.center().map(),
+                radii: ellip.size().div(2.0).map(),
                 resolution,
             }),
         )
