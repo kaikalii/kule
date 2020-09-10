@@ -107,6 +107,33 @@ pub trait Color: Copy {
     {
         self.map_all_other(other, std::ops::Mul::mul)
     }
+    fn brighten_normalize(self) -> Self {
+        if self.r() > self.g() && self.r() > self.b() {
+            self.mul(1.0 / self.r())
+        } else if self.g() > self.r() && self.g() > self.b() {
+            self.mul(1.0 / self.g())
+        } else {
+            self.mul(1.0 / self.b())
+        }
+    }
+    fn normalize(self) -> Self {
+        if self.r() <= 1.0 && self.g() <= 1.0 && self.b() <= 1.0
+            || self.r() == 0.0 && self.g() == 0.0 && self.b() == 0.0
+        {
+            self
+        } else {
+            self.brighten_normalize()
+        }
+    }
+    fn dist(self, other: Self) -> f32 {
+        ((self.r() - other.r()).powf(2.0)
+            + (self.g() - other.g()).powf(2.0)
+            + (self.b() - other.b()).powf(2.0))
+        .powf(0.5)
+    }
+    fn as_gray(self) -> f32 {
+        (self.r() + self.g() + self.b()) / 3.0
+    }
 }
 
 impl Color for Col {
