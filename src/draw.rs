@@ -167,6 +167,28 @@ where
             }),
         )
     }
+    pub fn ellipse<C, E>(
+        &mut self,
+        color: C,
+        ellip: E,
+        resolution: u16,
+    ) -> Transformable<'ctx, '_, S, F, G>
+    where
+        C: Color,
+        E: Pair,
+        E::Item: Vector2<Scalar = f32>,
+    {
+        let (center, radii) = ellip.to_pair();
+        Transformable::new(
+            self,
+            color.map(),
+            once(DrawType::Ellipse {
+                center: center.map(),
+                radii: radii.map(),
+                resolution,
+            }),
+        )
+    }
     pub fn polygon<'p, C, V, P>(
         &mut self,
         color: C,
@@ -667,15 +689,16 @@ where
             ],
             DrawType::Ellipse {
                 center,
-                radii,
+                radii: [a, b],
                 resolution,
             } => (0..*resolution)
                 .map(|i| Vertex {
-                    pos: center.add(
-                        (i as f32 / *resolution as f32 * f32::TAU)
-                            .angle_as_vector()
-                            .mul2(*radii),
-                    ),
+                    pos: center.add({
+                        let angle = i as f32 / *resolution as f32 * f32::TAU;
+                        let r = a * b
+                            / ((b * angle.cos()).powf(2.0) + (a * angle.sin()).powf(2.0)).sqrt();
+                        angle.angle_as_vector().mul(r)
+                    }),
                     color: self.color,
                 })
                 .collect::<Vec<_>>(),
