@@ -7,6 +7,11 @@ use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
+/// Satisfy a rust-analyzer bug
+fn trans() -> Trans {
+    Transform::new()
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
     pub pos: Vec2,
@@ -63,7 +68,7 @@ impl Camera {
         new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
     }
     fn transform(&self) -> Trans {
-        Trans::new()
+        trans()
             .translate(self.center.neg())
             .scale(self.zoom.mul2([1.0, -1.0]))
             .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
@@ -223,23 +228,100 @@ where
     }
 }
 
+/// Parameters for drawing rounded lines
+#[derive(Debug, Clone, Copy)]
+pub struct RoundLine {
+    /// The thickness of the line
+    pub thickness: f32,
+    /// The resolution of the circle formed by each rounded end
+    pub resolution: u32,
+}
+
+impl RoundLine {
+    /// Create a new `RoundLine` with the given `thickness` and the
+    /// default `resolution` of 20
+    pub const fn new(thickness: f32) -> Self {
+        RoundLine {
+            thickness,
+            resolution: 20,
+        }
+    }
+    /// Set the `resolution`
+    pub const fn resolution(self, resolution: u32) -> Self {
+        RoundLine { resolution, ..self }
+    }
+}
+
+impl From<f32> for RoundLine {
+    fn from(thickness: f32) -> Self {
+        RoundLine::new(thickness)
+    }
+}
+
+impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
+where
+    S: Surface,
+    F: Facade,
+{
+    pub fn round_line<C, V, L>(
+        &mut self,
+        color: C,
+        a: V,
+        b: V,
+        rl: L,
+    ) -> Transformable<'ctx, '_, S, F, G>
+    where
+        C: Color,
+        V: Vector2<Scalar = f32>,
+        L: Into<RoundLine>,
+    {
+        let a: Vec2 = a.map();
+        let b: Vec2 = b.map();
+        let rl = rl.into();
+        let diff = b.sub(a);
+        let diff_unit = diff.unit();
+        let radius = rl.thickness / 2.0;
+        let perp = diff_unit.rotate(f32::TAU / 4.0).mul(radius);
+        let length = diff.mag();
+        let a_center = a.lerp(b, radius / length);
+        let b_center = b.lerp(a, radius / length);
+        let a_start = a_center.add(perp);
+        let b_start = b_center.add(perp);
+        let semi_res = rl.resolution / 2;
+        let vertices: Vec<Vec2> = (0..=semi_res)
+            .map(|i| {
+                let angle = i as f32 / rl.resolution as f32 * f32::TAU;
+                a_start.rotate_about(angle, a_center)
+            })
+            .chain((semi_res..=rl.resolution).map(|i| {
+                let angle = i as f32 / rl.resolution as f32 * f32::TAU;
+                b_start.rotate_about(angle, b_center)
+            }))
+            .collect();
+        self.polygon(color, &vertices)
+    }
+}
+
+/// Size information for rendering glyphs
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlyphSize {
+    /// The pixel resolution to use when rasterizing then vectorizing the glyph
     pub resolution: u32,
+    /// The actual text size to use
     pub scale: f32,
 }
 
 impl GlyphSize {
     /// Create a new `GlyphsSize` with the given scale
-    /// and default resolution of 100
-    pub fn new(scale: f32) -> Self {
+    /// and default `resolution` of `100`
+    pub const fn new(scale: f32) -> Self {
         GlyphSize {
             resolution: 100,
             scale,
         }
     }
     /// Set the glyph resolution
-    pub fn resolution(self, resolution: u32) -> Self {
+    pub const fn resolution(self, resolution: u32) -> Self {
         GlyphSize { resolution, ..self }
     }
     /// Get the ratio of scale to resolution
@@ -248,7 +330,7 @@ impl GlyphSize {
     }
     /// Get the scale transform for scaling glyph vertices
     pub fn transform(&self) -> Trans {
-        Trans::new().zoom(self.ratio())
+        trans().zoom(self.ratio())
     }
 }
 
@@ -277,7 +359,7 @@ where
     {
         let color: Col = color.map();
         let size = size.into();
-        let scale_trans = size.transform();
+        let scale_trans = GlyphSize::transform(&size);
         if let Some(glyphs) = self.fonts.get(font) {
             let glyph = glyphs.glyph(ch, size.resolution).1.clone();
             Transformable::new(
@@ -312,7 +394,7 @@ where
         use fontdue::layout::*;
         let color: Col = color.map();
         let size = size.into();
-        let scale_trans = size.transform();
+        let scale_trans = GlyphSize::transform(&size);
         if let Some(glyphs) = self.fonts.get(font) {
             let mut gps = Vec::new();
             Layout::new().layout_horizontal(
@@ -411,7 +493,7 @@ where
             drawer: self.drawer,
             tys: Rc::clone(&self.tys),
             color: color.map(),
-            transform: Trans::new(),
+            transform: trans(),
             border: self.border,
             drawn: false,
         }
@@ -550,7 +632,7 @@ where
             drawer,
             tys: Rc::new(tys.into_iter().collect()),
             color,
-            transform: Trans::new(),
+            transform: trans(),
             drawn: false,
             border: None,
         }
