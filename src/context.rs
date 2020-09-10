@@ -6,9 +6,9 @@ use vector2math::*;
 pub use monitor::MonitorHandle;
 pub use window::{Fullscreen, WindowId};
 
-use crate::{Camera, Drawer, Event, Fonts, GlyphCache, KuleResult, StateTracker, Vec2};
+use crate::{App, Camera, Drawer, Fonts, GlyphCache, KuleResult, StateTracker, Vec2};
 
-pub struct Window(Display);
+pub struct Window(pub(crate) Display);
 
 impl Window {
     pub fn inner(&self) -> Ref<window::Window> {
@@ -46,24 +46,30 @@ impl Window {
     }
 }
 
-pub struct Context<G = ()> {
+pub struct Context<T>
+where
+    T: App,
+{
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
     pub window: Window,
-    pub fonts: Fonts<G>,
+    pub fonts: Fonts<T::FontId>,
     pub should_close: bool,
-    update_timer: Instant,
-    fps_timer: Instant,
+    pub(crate) update_timer: Instant,
+    pub(crate) fps_timer: Instant,
 }
 
-impl<G> Context<G> {
+impl<T> Context<T>
+where
+    T: App,
+{
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
-    fn draw<F>(&self, mut f: F)
+    pub(crate) fn draw<F>(&self, mut f: F)
     where
-        F: FnMut(&mut Drawer<Frame, Display, G>),
+        F: FnMut(&mut Drawer<Frame, Display, T::FontId>),
     {
         let mut frame = self.window.0.draw();
         let mut drawer = Drawer::new(
@@ -78,23 +84,26 @@ impl<G> Context<G> {
     }
 }
 
-impl<G> Context<G>
+impl<T> Context<T>
 where
-    G: Copy + Eq + std::hash::Hash,
+    T: App,
 {
-    pub fn load_font(&mut self, font_id: G, bytes: &[u8]) -> KuleResult<()> {
+    pub fn load_font(&mut self, font_id: T::FontId, bytes: &[u8]) -> KuleResult<()> {
         self.fonts.load(font_id, bytes)
     }
-    pub fn glyphs(&self, font_id: G) -> &GlyphCache {
+    pub fn glyphs(&self, font_id: T::FontId) -> &GlyphCache {
         self.get_glyphs(font_id)
             .expect("No font loaded for font id")
     }
-    pub fn get_glyphs(&self, font_id: G) -> Option<&GlyphCache> {
+    pub fn get_glyphs(&self, font_id: T::FontId) -> Option<&GlyphCache> {
         self.fonts.get(font_id)
     }
 }
 
-impl Context {
+impl<T> Context<T>
+where
+    T: App<FontId = ()>,
+{
     pub fn load_only_font(&mut self, bytes: &[u8]) -> KuleResult<()> {
         self.load_font((), bytes)
     }
@@ -103,35 +112,23 @@ impl Context {
     }
 }
 
-type Callback<F> = Option<Box<F>>;
-
 /// The primary structure for defining your app's behavior
 #[allow(clippy::type_complexity)]
-pub struct AppBuilder<T, G = ()> {
+pub struct ContextBuilder {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub setup: Callback<dyn FnOnce(&mut T, &mut Context<G>)>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>)>,
-    pub event: Callback<dyn Fn(Event, &mut T, &mut Context<G>)>,
-    pub update: Callback<dyn Fn(f32, &mut T, &mut Context<G>)>,
-    pub teardown: Callback<dyn Fn(T, &mut Context<G>)>,
     pub update_frequency: f32,
     pub samples: u16,
     pub icon: Option<window::Icon>,
 }
 
-impl<T, G> Default for AppBuilder<T, G> {
+impl Default for ContextBuilder {
     fn default() -> Self {
-        AppBuilder {
+        ContextBuilder {
             title: env!("CARGO_CRATE_NAME").into(),
             size: [800.0; 2],
             automatic_close: true,
-            setup: None,
-            draw: None,
-            event: None,
-            update: None,
-            teardown: None,
             update_frequency: 120.0,
             samples: 0,
             icon: None,
@@ -139,101 +136,15 @@ impl<T, G> Default for AppBuilder<T, G> {
     }
 }
 
-impl<T, G> AppBuilder<T, G>
-where
-    T: 'static,
-    G: 'static,
-{
+impl ContextBuilder {
     pub fn new() -> Self {
-        AppBuilder::default()
-    }
-    pub fn run(mut self, mut app: T) -> KuleResult<()> {
-        // Build event loop and display
-        #[cfg(not(test))]
-        let event_loop = event_loop::EventLoop::new();
-        #[cfg(test)]
-        let event_loop = {
-            #[cfg(unix)]
-            use platform::unix::EventLoopExtUnix;
-            #[cfg(windows)]
-            use platform::windows::EventLoopExtWindows;
-            event_loop::EventLoop::<()>::new_any_thread()
-        };
-        let wb = window::WindowBuilder::new()
-            .with_title(&self.title)
-            .with_window_icon(self.icon.take())
-            .with_inner_size(dpi::LogicalSize::new(self.size[0], self.size[1]));
-        let cb = ContextBuilder::new().with_multisampling(self.samples);
-        let display = Display::new(wb, cb, &event_loop)?;
-        let window_size = display.gl_window().window().inner_size();
-        let program = crate::default_shaders(&display);
-        let mut ctx = Context {
-            program,
-            fonts: Default::default(),
-            tracker: StateTracker::new(),
-            camera: Camera {
-                center: [0.0; 2],
-                zoom: 1.0,
-                window_size: window_size.into(),
-            },
-            window: Window(display),
-            should_close: false,
-            update_timer: Instant::now(),
-            fps_timer: Instant::now(),
-        };
-        if let Some(setup) = self.setup.take() {
-            setup(&mut app, &mut ctx)
-        }
-        let mut app = Some(app);
-        // Run the event loop
-        event_loop.run(move |event, _, cf| {
-            // Draw
-            if let event::Event::RedrawEventsCleared = &event {
-                if let Some(draw) = &self.draw {
-                    let now = Instant::now();
-                    let dt = (now - ctx.fps_timer).as_secs_f32();
-                    ctx.fps_timer = now;
-                    ctx.tracker.fps = ctx.tracker.fps.lerp(1.0 / dt, 0.1);
-                    if let Some(app) = &app {
-                        ctx.draw(|drawer| draw(drawer, app, &ctx));
-                    }
-                }
-            }
-            // Handle events
-            for event in Event::from_glutin(event, &mut ctx.tracker, &mut ctx.camera) {
-                let automatic_close = event == Event::CloseRequest && self.automatic_close;
-                if automatic_close || ctx.should_close {
-                    *cf = event_loop::ControlFlow::Exit;
-                    if let Some(teardown) = &self.teardown {
-                        if let Some(app) = app.take() {
-                            teardown(app, &mut ctx);
-                        }
-                    }
-                    break;
-                } else if let Some(handle_event) = &self.event {
-                    if let Some(app) = &mut app {
-                        handle_event(event, app, &mut ctx);
-                    }
-                }
-            }
-            // Update
-            if let Some(update) = &self.update {
-                let now = Instant::now();
-                let dt = (now - ctx.update_timer).as_secs_f32();
-                if dt >= 1.0 / self.update_frequency {
-                    ctx.update_timer = now;
-                    if let Some(app) = &mut app {
-                        update(dt, app, &mut ctx);
-                    }
-                }
-            }
-        })
+        ContextBuilder::default()
     }
     pub fn title<S>(self, title: S) -> Self
     where
         S: Into<String>,
     {
-        AppBuilder {
+        ContextBuilder {
             title: title.into(),
             ..self
         }
@@ -242,69 +153,24 @@ where
     where
         V: Vector2<Scalar = f32>,
     {
-        AppBuilder {
+        ContextBuilder {
             size: size.map(),
             ..self
         }
     }
     pub fn automatic_close(self, automatic_close: bool) -> Self {
-        AppBuilder {
+        ContextBuilder {
             automatic_close,
             ..self
         }
     }
     pub fn samples(self, samples: u16) -> Self {
-        AppBuilder { samples, ..self }
+        ContextBuilder { samples, ..self }
     }
     pub fn icon(self, rgba: Vec<u8>, width: u32, height: u32) -> KuleResult<Self> {
-        Ok(AppBuilder {
+        Ok(ContextBuilder {
             icon: Some(window::Icon::from_rgba(rgba, width, height)?),
             ..self
         })
-    }
-    pub fn setup<F>(self, f: F) -> Self
-    where
-        F: FnOnce(&mut T, &mut Context<G>) + 'static,
-    {
-        AppBuilder {
-            setup: Some(Box::new(f)),
-            ..self
-        }
-    }
-    pub fn draw<F>(self, f: F) -> Self
-    where
-        F: Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>) + 'static,
-    {
-        AppBuilder {
-            draw: Some(Box::new(f)),
-            ..self
-        }
-    }
-    pub fn event<F>(self, f: F) -> Self
-    where
-        F: Fn(Event, &mut T, &mut Context<G>) + 'static,
-    {
-        AppBuilder {
-            event: Some(Box::new(f)),
-            ..self
-        }
-    }
-    pub fn update<F>(self, f: F) -> Self
-    where
-        F: Fn(f32, &mut T, &mut Context<G>) + 'static,
-    {
-        AppBuilder {
-            update: Some(Box::new(f)),
-            ..self
-        }
-    }
-    pub fn teardown<F>(self, f: F) -> Self
-    where
-        F: Fn(T, &mut Context<G>) + 'static,
-    {
-        AppBuilder {
-            teardown: Some(Box::new(f)),
-            ..self
-        }
     }
 }

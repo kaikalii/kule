@@ -1,5 +1,7 @@
 #![allow(clippy::single_match)]
 
+mod app;
+pub use app::*;
 mod context;
 pub use context::*;
 mod error;
@@ -39,19 +41,22 @@ pub fn rotate_about(radians: f32, pivot: Vec2) -> impl Fn(Trans) -> Trans {
 }
 
 #[cfg(test)]
-#[test]
-fn test() {
+mod test {
+    use super::*;
     #[derive(Debug)]
-    struct App {
+    struct MyApp {
         pos: Vec2,
     }
-    AppBuilder::<App>::new()
-        .setup(|_, ctx| {
+    impl App for MyApp {
+        type FontId = ();
+        type SoundId = ();
+        fn setup(ctx: &mut Context<Self>) -> Self {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
-        })
-        .update(|dt, app, ctx| {
+            MyApp { pos: [0.0; 2] }
+        }
+        fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self>) {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
@@ -60,8 +65,12 @@ fn test() {
             app.pos.add_assign(wasd.mul(100.0 * dt));
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
-        })
-        .draw(|draw, app, _| {
+        }
+        fn draw<S, F>(draw: &mut Drawer<S, F, Self::FontId>, app: &Self, _: &Context<Self>)
+        where
+            S: Surface,
+            F: Facade,
+        {
             draw.clear(Col::black());
             let rect = Rect::centered(app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
@@ -86,10 +95,14 @@ fn test() {
             );
             draw.text(Col::white(), text, font_size)
                 .transform(translate([text_left, 0.0]));
-        })
-        .teardown(|app, _| {
+        }
+        fn teardown(app: Self, _: &mut Context<Self>) {
             println!("{:?}", app);
-        })
-        .run(App { pos: [0.0; 2] })
-        .unwrap();
+        }
+    }
+
+    #[test]
+    fn test() {
+        MyApp::run().unwrap();
+    }
 }
