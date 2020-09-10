@@ -1,10 +1,12 @@
 use std::{
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     iter::once,
+    ops::{Deref, Index},
     rc::Rc,
 };
 
-use fontdue::*;
+use fontdue::{layout::*, *};
 use lyon_tessellation::{
     geom::math::{point, Point},
     geometry_builder::simple_builder,
@@ -12,11 +14,81 @@ use lyon_tessellation::{
     FillOptions, FillTessellator, VertexBuffers,
 };
 
-use crate::Vec2;
+use crate::{Trans, Transform, Vec2};
 
 pub use fontdue::Metrics;
 
-pub struct Fonts<G>(HashMap<G, GlyphCache>);
+/// Size information for rendering glyphs
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphSize {
+    /// The pixel resolution to use when rasterizing then vectorizing the glyph
+    pub resolution: u32,
+    /// The actual text size to use
+    pub scale: f32,
+}
+
+impl GlyphSize {
+    /// Create a new `GlyphsSize` with the given scale
+    /// and default `resolution` of `100`
+    pub const fn new(scale: f32) -> Self {
+        GlyphSize {
+            resolution: 100,
+            scale,
+        }
+    }
+    /// Set the glyph resolution
+    pub fn resolution(self, resolution: u32) -> Self {
+        GlyphSize { resolution, ..self }
+    }
+    /// Get the ratio of scale to resolution
+    pub fn ratio(&self) -> f32 {
+        self.scale / self.resolution as f32
+    }
+    /// Get the scale transform for scaling glyph vertices
+    pub fn transform(&self) -> Trans {
+        Trans::new().zoom(self.ratio())
+    }
+}
+
+impl From<f32> for GlyphSize {
+    fn from(scale: f32) -> Self {
+        GlyphSize::new(scale)
+    }
+}
+
+/// Information for rendering glyphs
+pub struct GlyphSpec<G = ()> {
+    /// The font id
+    pub font_id: G,
+    /// The size
+    pub size: GlyphSize,
+}
+
+impl<G> GlyphSpec<G> {
+    pub fn new<S>(font_id: G, size: S) -> Self
+    where
+        S: Into<GlyphSize>,
+    {
+        GlyphSpec {
+            font_id,
+            size: size.into(),
+        }
+    }
+}
+
+impl From<f32> for GlyphSpec {
+    fn from(scale: f32) -> Self {
+        GlyphSpec::from(GlyphSize::from(scale))
+    }
+}
+
+impl From<GlyphSize> for GlyphSpec {
+    fn from(size: GlyphSize) -> Self {
+        GlyphSpec::new((), size)
+    }
+}
+
+pub struct Fonts<G = ()>(HashMap<G, GlyphCache>);
 
 impl<G> Default for Fonts<G> {
     fn default() -> Self {
@@ -37,8 +109,41 @@ where
         );
         Ok(())
     }
-    pub fn get(&mut self, id: G) -> Option<&mut GlyphCache> {
-        self.0.get_mut(&id)
+    pub fn get(&self, id: G) -> Option<&GlyphCache> {
+        self.0.get(&id)
+    }
+    pub fn width<S>(&self, text: &str, spec: S) -> f32
+    where
+        S: Into<GlyphSpec<G>>,
+    {
+        let spec = spec.into();
+        let mut gps = Vec::new();
+        Layout::new().layout_horizontal(
+            &[self[spec.font_id].font()],
+            &[&TextStyle::new(text, spec.size.resolution as f32, 0)],
+            &LayoutSettings {
+                ..Default::default()
+            },
+            &mut gps,
+        );
+        gps.into_iter().map(|gp| gp.width as f32).sum::<f32>() * spec.size.ratio()
+    }
+}
+
+impl<G> Index<G> for Fonts<G>
+where
+    G: Eq + std::hash::Hash,
+{
+    type Output = GlyphCache;
+    fn index(&self, font_id: G) -> &Self::Output {
+        self.get(font_id).expect("No font loaded for font id")
+    }
+}
+
+impl Deref for Fonts {
+    type Target = GlyphCache;
+    fn deref(&self) -> &Self::Target {
+        &self[()]
     }
 }
 
@@ -50,14 +155,14 @@ pub struct GlyphGeometry {
 
 pub struct GlyphCache {
     font: Font,
-    geometry: HashMap<(char, u32), (Metrics, GlyphGeometry)>,
+    geometry: RefCell<HashMap<(char, u32), (Metrics, GlyphGeometry)>>,
 }
 
 impl From<Font> for GlyphCache {
     fn from(font: Font) -> Self {
         GlyphCache {
             font,
-            geometry: HashMap::new(),
+            geometry: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -66,18 +171,38 @@ impl GlyphCache {
     pub fn font(&self) -> &Font {
         &self.font
     }
-    pub fn metrics(&mut self, ch: char, resolution: u32) -> &Metrics {
-        &self.glyph(ch, resolution).0
+    pub fn metrics(&self, ch: char, resolution: u32) -> Metrics {
+        self.glyph(ch, resolution).0
     }
     #[allow(clippy::map_entry)]
-    pub fn glyph(&mut self, ch: char, resolution: u32) -> &(Metrics, GlyphGeometry) {
-        if !self.geometry.contains_key(&(ch, resolution)) {
+    pub fn glyph(&self, ch: char, resolution: u32) -> Ref<(Metrics, GlyphGeometry)> {
+        if !self.geometry.borrow().contains_key(&(ch, resolution)) {
             let glyph_data = self.vectorize(ch, resolution);
-            self.geometry.insert((ch, resolution), glyph_data);
+            self.geometry
+                .borrow_mut()
+                .insert((ch, resolution), glyph_data);
         }
-        self.geometry.get(&(ch, resolution)).unwrap()
+        Ref::map(self.geometry.borrow(), |geometry| {
+            geometry.get(&(ch, resolution)).unwrap()
+        })
     }
-    fn vectorize(&mut self, ch: char, resolution: u32) -> (Metrics, GlyphGeometry) {
+    pub fn width<S>(&self, text: &str, size: S) -> f32
+    where
+        S: Into<GlyphSize>,
+    {
+        let size = size.into();
+        let mut gps = Vec::new();
+        Layout::new().layout_horizontal(
+            &[self.font()],
+            &[&TextStyle::new(text, size.resolution as f32, 0)],
+            &LayoutSettings {
+                ..Default::default()
+            },
+            &mut gps,
+        );
+        gps.into_iter().map(|gp| gp.width as f32).sum::<f32>() * size.ratio()
+    }
+    fn vectorize(&self, ch: char, resolution: u32) -> (Metrics, GlyphGeometry) {
         let (metrics, bytes) = self.font.rasterize(ch, resolution as f32);
         let get = |[x, y]: [usize; 2]| bytes[y * metrics.width + x] > 0;
         let mut edges = HashSet::new();

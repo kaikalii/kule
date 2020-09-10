@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, rc::Rc};
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Fonts, Rect, Trans, Vec2};
+use crate::{Col, Color, Fonts, GlyphSize, GlyphSpec, Rect, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
@@ -42,11 +42,29 @@ impl Camera {
     pub fn window_size(self) -> Vec2 {
         self.window_size
     }
-    pub fn center(self, center: Vec2) -> Self {
+    pub fn with_center(self, center: Vec2) -> Self {
         Camera { center, ..self }
     }
-    pub fn zoom(self, zoom: Vec2) -> Self {
+    pub fn with_zoom(self, zoom: Vec2) -> Self {
         Camera { zoom, ..self }
+    }
+    pub fn zoom(self, zoom: Vec2) -> Self {
+        Camera {
+            zoom: self.zoom.mul2(zoom),
+            ..self
+        }
+    }
+    pub fn translate(self, offset: Vec2) -> Self {
+        Camera {
+            center: self.center.add(offset),
+            ..self
+        }
+    }
+    pub fn zoom_on(self, zoom: Vec2, on: Vec2) -> Self {
+        let old_pos = self.pos_to_coords(on);
+        let new_cam = self.zoom(zoom);
+        let new_pos = new_cam.pos_to_coords(on);
+        new_cam.translate(self.center.add(new_pos.sub(old_pos).neg()))
     }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
@@ -61,12 +79,6 @@ impl Camera {
             .mul2(self.zoom)
             .add(self.window_size.div(2.0))
     }
-    pub fn zoom_on(self, zoom: Vec2, on: Vec2) -> Self {
-        let old_pos = self.pos_to_coords(on);
-        let new_cam = self.zoom(zoom);
-        let new_pos = new_cam.pos_to_coords(on);
-        new_cam.center(self.center.add(new_pos.sub(old_pos).neg()))
-    }
     fn transform(&self) -> Trans {
         trans()
             .translate(self.center.neg())
@@ -79,8 +91,8 @@ pub struct Drawer<'ctx, S, F, G> {
     surface: &'ctx mut S,
     facade: &'ctx F,
     program: &'ctx Program,
-    fonts: &'ctx mut Fonts<G>,
-    camera: Camera,
+    pub fonts: &'ctx Fonts<G>,
+    pub camera: Camera,
     indices: IndicesCache,
 }
 
@@ -95,7 +107,7 @@ where
         surface: &'ctx mut S,
         facade: &'ctx F,
         program: &'ctx Program,
-        fonts: &'ctx mut Fonts<G>,
+        fonts: &'ctx Fonts<G>,
         camera: Camera,
     ) -> Self {
         Drawer {
@@ -329,44 +341,6 @@ where
     }
 }
 
-/// Size information for rendering glyphs
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GlyphSize {
-    /// The pixel resolution to use when rasterizing then vectorizing the glyph
-    pub resolution: u32,
-    /// The actual text size to use
-    pub scale: f32,
-}
-
-impl GlyphSize {
-    /// Create a new `GlyphsSize` with the given scale
-    /// and default `resolution` of `100`
-    pub const fn new(scale: f32) -> Self {
-        GlyphSize {
-            resolution: 100,
-            scale,
-        }
-    }
-    /// Set the glyph resolution
-    pub const fn resolution(self, resolution: u32) -> Self {
-        GlyphSize { resolution, ..self }
-    }
-    /// Get the ratio of scale to resolution
-    pub fn ratio(&self) -> f32 {
-        self.scale / self.resolution as f32
-    }
-    /// Get the scale transform for scaling glyph vertices
-    pub fn transform(&self) -> Trans {
-        trans().zoom(self.ratio())
-    }
-}
-
-impl From<f32> for GlyphSize {
-    fn from(scale: f32) -> Self {
-        GlyphSize::new(scale)
-    }
-}
-
 impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
 where
     S: Surface,
@@ -377,18 +351,17 @@ where
         &'drawer mut self,
         color: C,
         ch: char,
-        size: L,
-        font: G,
+        spec: L,
     ) -> Transformable<'ctx, 'drawer, S, F, G>
     where
         C: Color,
-        L: Into<GlyphSize>,
+        L: Into<GlyphSpec<G>>,
     {
         let color: Col = color.map();
-        let size = size.into();
-        let scale_trans = GlyphSize::transform(&size);
-        if let Some(glyphs) = self.fonts.get(font) {
-            let glyph = glyphs.glyph(ch, size.resolution).1.clone();
+        let spec = spec.into();
+        let scale_trans = GlyphSize::transform(&spec.size);
+        if let Some(glyphs) = self.fonts.get(spec.font_id) {
+            let glyph = glyphs.glyph(ch, spec.size.resolution).1.clone();
             Transformable::new(
                 self,
                 color,
@@ -400,7 +373,7 @@ where
                         .collect(),
                     indices: glyph.indices,
                     ch,
-                    resolution: size.resolution,
+                    resolution: spec.size.resolution,
                 }),
             )
         } else {
@@ -411,22 +384,21 @@ where
         &mut self,
         color: C,
         string: &str,
-        size: L,
-        font: G,
+        spec: L,
     ) -> Transformable<'ctx, '_, S, F, G>
     where
         C: Color,
-        L: Into<GlyphSize>,
+        L: Into<GlyphSpec<G>>,
     {
         use fontdue::layout::*;
         let color: Col = color.map();
-        let size = size.into();
-        let scale_trans = GlyphSize::transform(&size);
-        if let Some(glyphs) = self.fonts.get(font) {
+        let spec = spec.into();
+        let scale_trans = GlyphSize::transform(&spec.size);
+        if let Some(glyphs) = self.fonts.get(spec.font_id) {
             let mut gps = Vec::new();
             Layout::new().layout_horizontal(
                 &[glyphs.font()],
-                &[&TextStyle::new(string, size.resolution as f32, 0)],
+                &[&TextStyle::new(string, spec.size.resolution as f32, 0)],
                 &LayoutSettings {
                     ..Default::default()
                 },
@@ -435,8 +407,11 @@ where
             let buffers: Vec<_> = gps
                 .into_iter()
                 .map(|gp| {
-                    let (_, glyph) = glyphs.glyph(gp.key.c, size.resolution);
-                    let offset = [gp.x, -(size.resolution as f32 + gp.y + gp.height as f32)];
+                    let (_, glyph) = &*glyphs.glyph(gp.key.c, spec.size.resolution);
+                    let offset = [
+                        gp.x,
+                        -(spec.size.resolution as f32 + gp.y + gp.height as f32),
+                    ];
                     (
                         glyph
                             .vertices
@@ -457,7 +432,7 @@ where
                         vertices,
                         indices,
                         ch,
-                        resolution: size.resolution,
+                        resolution: spec.size.resolution,
                     }),
             )
         } else {

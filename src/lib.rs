@@ -74,9 +74,12 @@ fn test() {
             draw.ellipse([1.0, 0.5, 0.5], (app.pos, [25.0, 15.0]), 32)
                 .border(Col::blue(1.0), 3.0);
             draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
-            draw.line(Col::white(), ([-200.0, 0.0], [300.0, 0.0]), 1.0);
-            draw.text(Col::white(), "Wow, pretty good!", 20.0, ())
-                .transform(translate([-200.0, 0.0]));
+            let font_size = 20.0;
+            let text = "Wow, pretty good!";
+            let text_left = -200.0;
+            let text_width = draw.line(Col::white(), ([text_left, 0.0], [300.0, 0.0]), 1.0);
+            draw.text(Col::white(), text, font_size)
+                .transform(translate([text_left, 0.0]));
         })
         .run(App { pos: [0.0; 2] })
         .unwrap();

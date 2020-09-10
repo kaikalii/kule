@@ -1,7 +1,4 @@
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    time::Instant,
-};
+use std::{cell::Ref, time::Instant};
 
 use glium::{glutin::*, *};
 use vector2math::*;
@@ -54,7 +51,7 @@ pub struct Context<G = ()> {
     pub tracker: StateTracker,
     pub camera: Camera,
     pub window: Window,
-    fonts: RefCell<Fonts<G>>,
+    pub fonts: Fonts<G>,
     update_timer: Instant,
     fps_timer: Instant,
 }
@@ -68,12 +65,11 @@ impl<G> Context<G> {
         F: FnMut(&mut Drawer<Frame, Display, G>),
     {
         let mut frame = self.window.0.draw();
-        let mut fonts = self.fonts.borrow_mut();
         let mut drawer = Drawer::new(
             &mut frame,
             &self.window.0,
             &self.program,
-            &mut *fonts,
+            &self.fonts,
             self.camera,
         );
         f(&mut drawer);
@@ -83,30 +79,25 @@ impl<G> Context<G> {
 
 impl<G> Context<G>
 where
-    G: Copy + Eq + std::hash::Hash + std::fmt::Debug,
+    G: Copy + Eq + std::hash::Hash,
 {
-    pub fn load_font(&self, font_id: G, bytes: &[u8]) -> crate::Result<()> {
-        self.fonts.borrow_mut().load(font_id, bytes)
+    pub fn load_font(&mut self, font_id: G, bytes: &[u8]) -> crate::Result<()> {
+        self.fonts.load(font_id, bytes)
     }
-    pub fn glyphs(&self, font_id: G) -> RefMut<GlyphCache> {
-        RefMut::map(self.fonts.borrow_mut(), |fonts| fonts.get(font_id).unwrap())
+    pub fn glyphs(&self, font_id: G) -> &GlyphCache {
+        self.get_glyphs(font_id)
+            .expect("No font loaded for font id")
     }
-    pub fn get_glyphs(&self, font_id: G) -> Option<RefMut<GlyphCache>> {
-        if self.fonts.borrow_mut().get(font_id).is_some() {
-            Some(RefMut::map(self.fonts.borrow_mut(), |fonts| {
-                fonts.get(font_id).unwrap()
-            }))
-        } else {
-            None
-        }
+    pub fn get_glyphs(&self, font_id: G) -> Option<&GlyphCache> {
+        self.fonts.get(font_id)
     }
 }
 
 impl Context {
-    pub fn load_only_font(&self, bytes: &[u8]) -> crate::Result<()> {
+    pub fn load_only_font(&mut self, bytes: &[u8]) -> crate::Result<()> {
         self.load_font((), bytes)
     }
-    pub fn only_glyphs(&self) -> RefMut<GlyphCache> {
+    pub fn only_glyphs(&self) -> &GlyphCache {
         self.glyphs(())
     }
 }
