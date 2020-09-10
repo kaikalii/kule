@@ -57,6 +57,7 @@ pub struct Context<T, G = ()> {
     pub window: Window,
     fonts: RefCell<Fonts<G>>,
     update_timer: Instant,
+    fps_timer: Instant,
 }
 
 impl<T, G> Context<T, G> {
@@ -185,6 +186,7 @@ where
             },
             window: Window(display),
             update_timer: Instant::now(),
+            fps_timer: Instant::now(),
         };
         if let Some(setup) = self.setup.take() {
             setup(&mut ctx)
@@ -194,6 +196,10 @@ where
             // Draw
             if let event::Event::RedrawEventsCleared = &event {
                 if let Some(draw) = &self.draw {
+                    let now = Instant::now();
+                    let dt = (now - ctx.fps_timer).as_secs_f32();
+                    ctx.fps_timer = now;
+                    ctx.tracker.fps = ctx.tracker.fps.lerp(1.0 / dt, 0.1);
                     ctx.draw(|drawer| draw(drawer, &ctx));
                 }
             }

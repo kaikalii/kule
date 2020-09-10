@@ -104,6 +104,7 @@ pub struct StateTracker {
     modifiers: Modifiers,
     keys: HashSet<Key>,
     mouse_buttons: HashSet<MouseButton>,
+    pub(crate) fps: f32,
 }
 
 impl StateTracker {
@@ -127,6 +128,9 @@ impl StateTracker {
     }
     pub fn key_diff2(&self, left: Key, right: Key, up: Key, down: Key) -> Vec2 {
         [self.key_diff(left, right), self.key_diff(up, down)]
+    }
+    pub fn fps(&self) -> f32 {
+        self.fps
     }
 }
 
