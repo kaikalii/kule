@@ -48,7 +48,7 @@ fn test() {
         .setup(|_, ctx| {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
-            ctx.camera.zoom = [4.0; 2];
+            ctx.camera.zoom = 4.0;
         })
         .update(|dt, app, ctx| {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
@@ -58,7 +58,7 @@ fn test() {
             let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
             app.pos.add_assign(wasd.mul(100.0 * dt));
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
-            ctx.camera = ctx.camera.zoom_uniform(1.1f32.powf(plus_minus * dt * 10.0));
+            ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
         })
         .draw(|draw, app, _| {
             draw.clear(Col::black());

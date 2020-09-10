@@ -34,7 +34,7 @@ fn uniforms() -> UniformsStorage<'static, [[f32; 4]; 4], EmptyUniforms> {
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
     pub center: Vec2,
-    pub zoom: Vec2,
+    pub zoom: f32,
     pub(crate) window_size: Vec2,
 }
 
@@ -45,18 +45,18 @@ impl Camera {
     pub fn with_center(self, center: Vec2) -> Self {
         Camera { center, ..self }
     }
-    pub fn with_zoom(self, zoom: Vec2) -> Self {
+    pub fn with_zoom(self, zoom: f32) -> Self {
         Camera { zoom, ..self }
     }
-    pub fn zoom(self, zoom: Vec2) -> Self {
+    pub fn zoom(self, zoom: f32) -> Self {
         Camera {
-            zoom: self.zoom.mul2(zoom),
+            zoom: self.zoom * zoom,
             ..self
         }
     }
-    pub fn zoom_uniform(self, zoom: f32) -> Self {
+    pub fn bound_zoom(self, min: f32, max: f32) -> Self {
         Camera {
-            zoom: self.zoom.mul(zoom),
+            zoom: self.zoom.max(min).min(max),
             ..self
         }
     }
@@ -66,7 +66,7 @@ impl Camera {
             ..self
         }
     }
-    pub fn zoom_on(self, zoom: Vec2, on: Vec2) -> Self {
+    pub fn zoom_on(self, zoom: f32, on: Vec2) -> Self {
         let old_pos = self.pos_to_coords(on);
         let new_cam = self.zoom(zoom);
         let new_pos = new_cam.pos_to_coords(on);
@@ -74,7 +74,7 @@ impl Camera {
     }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
-            .div2(self.zoom)
+            .div(self.zoom)
             .mul(2.0)
             .add(self.center)
     }
@@ -82,13 +82,13 @@ impl Camera {
         coords
             .sub(self.center)
             .div(2.0)
-            .mul2(self.zoom)
+            .mul(self.zoom)
             .add(self.window_size.div(2.0))
     }
     fn transform(&self) -> Trans {
         trans()
             .translate(self.center.neg())
-            .scale(self.zoom.mul2([1.0, -1.0]))
+            .scale([self.zoom; 2].mul2([1.0, -1.0]))
             .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
     }
 }
@@ -145,7 +145,7 @@ where
         self.with_camera(
             |_| Camera {
                 center: base_camera.window_size.div(2.0),
-                zoom: [1.0; 2],
+                zoom: 1.0,
                 window_size: base_camera.window_size,
             },
             d,

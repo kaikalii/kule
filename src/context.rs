@@ -170,7 +170,7 @@ where
             tracker: StateTracker::new(),
             camera: Camera {
                 center: [0.0; 2],
-                zoom: [1.0; 2],
+                zoom: 1.0,
                 window_size: window_size.into(),
             },
             window: Window(display),
