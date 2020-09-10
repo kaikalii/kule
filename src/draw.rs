@@ -110,27 +110,28 @@ where
     pub fn with_camera<C, D, R>(&mut self, camera: C, d: D) -> R
     where
         C: FnOnce(Camera) -> Camera,
-        D: FnOnce() -> R,
+        D: FnOnce(&mut Self) -> R,
     {
         let base_camera = self.camera;
         self.camera = camera(base_camera);
-        let res = d();
+        let res = d(self);
         self.camera = base_camera;
         res
     }
+
     pub fn with_absolute_camera<D, R>(&mut self, d: D) -> R
     where
-        D: FnOnce() -> R,
+        D: FnOnce(&mut Self) -> R,
     {
         let base_camera = self.camera;
-        self.camera = Camera {
-            center: base_camera.window_size.div(2.0),
-            zoom: [1.0, -1.0],
-            window_size: base_camera.window_size,
-        };
-        let res = d();
-        self.camera = base_camera;
-        res
+        self.with_camera(
+            |_| Camera {
+                center: base_camera.window_size.div(2.0),
+                zoom: [1.0; 2],
+                window_size: base_camera.window_size,
+            },
+            d,
+        )
     }
     pub fn clear<C>(&mut self, color: C)
     where
