@@ -230,14 +230,25 @@ pub struct GlyphSize {
 }
 
 impl GlyphSize {
+    /// Create a new `GlyphsSize` with the given scale
+    /// and default resolution of 100
     pub fn new(scale: f32) -> Self {
         GlyphSize {
             resolution: 100,
             scale,
         }
     }
+    /// Set the glyph resolution
     pub fn resolution(self, resolution: u32) -> Self {
         GlyphSize { resolution, ..self }
+    }
+    /// Get the ratio of scale to resolution
+    pub fn ratio(&self) -> f32 {
+        self.scale / self.resolution as f32
+    }
+    /// Get the scale transform for scaling glyph vertices
+    pub fn transform(&self) -> Trans {
+        Trans::new().zoom(self.ratio())
     }
 }
 
@@ -266,13 +277,18 @@ where
     {
         let color: Col = color.map();
         let size = size.into();
+        let scale_trans = size.transform();
         if let Some(glyphs) = self.fonts.get(font) {
             let glyph = glyphs.glyph(ch, size.resolution).1.clone();
             Transformable::new(
                 self,
                 color,
                 once(DrawType::Character {
-                    vertices: glyph.vertices,
+                    vertices: glyph
+                        .vertices
+                        .into_iter()
+                        .map(|v| v.transform(scale_trans))
+                        .collect(),
                     indices: glyph.indices,
                     ch,
                     resolution: size.resolution,
@@ -296,6 +312,7 @@ where
         use fontdue::layout::*;
         let color: Col = color.map();
         let size = size.into();
+        let scale_trans = size.transform();
         if let Some(glyphs) = self.fonts.get(font) {
             let mut gps = Vec::new();
             Layout::new().layout_horizontal(
@@ -309,13 +326,14 @@ where
             let buffers: Vec<_> = gps
                 .into_iter()
                 .map(|gp| {
-                    let (metrics, glyph) = glyphs.glyph(gp.key.c, size.resolution);
-                    let offset = [
-                        gp.x,
-                        gp.y - (metrics.bounds.ymax - metrics.bounds.ymin) as f32,
-                    ];
+                    let (_, glyph) = glyphs.glyph(gp.key.c, size.resolution);
+                    let offset = [gp.x, -(size.resolution as f32 + gp.y + gp.height as f32)];
                     (
-                        glyph.vertices.iter().map(|v| v.add(offset)).collect(),
+                        glyph
+                            .vertices
+                            .iter()
+                            .map(|v| v.add(offset).transform(scale_trans))
+                            .collect(),
                         glyph.indices.clone(),
                         gp.key.c,
                     )

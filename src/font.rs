@@ -98,29 +98,6 @@ impl GlyphCache {
             }
         }
 
-        for j in 0..metrics.height {
-            for i in 0..metrics.width {
-                if get([i, j]) {
-                    print!("#");
-                } else {
-                    print!(" ");
-                }
-            }
-            println!();
-        }
-        println!();
-        for j in 0..metrics.height {
-            for i in 0..metrics.width {
-                if edges.contains(&[i, j]) {
-                    print!("#");
-                } else {
-                    print!(" ");
-                }
-            }
-            println!();
-        }
-        println!();
-
         let mut polys: Vec<Vec<[usize; 2]>> = Vec::new();
         // Group edges into polygons
         while let Some(first) = edges.iter().next().copied() {
@@ -149,13 +126,13 @@ impl GlyphCache {
         // Triangulate
         let mut path = Path::builder();
         for poly in polys {
-            let mut poly_iter = poly.into_iter();
+            let mut poly_iter = poly.into_iter().map(|[x, y]| [x as f32, y as f32]);
             let [x, y] = poly_iter.next().unwrap();
-            path.move_to(point(x as f32, y as f32));
+            path.move_to(point(x, y));
             for [x, y] in poly_iter {
-                path.line_to(point(x as f32, y as f32));
+                path.line_to(point(x, y));
             }
-            path.line_to(point(x as f32, y as f32));
+            path.line_to(point(x, y));
             path.close();
         }
         let path = path.build();
