@@ -58,9 +58,7 @@ fn test() {
             let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
             app.pos.add_assign(wasd.mul(100.0 * dt));
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
-            ctx.camera = ctx
-                .camera
-                .zoom(ctx.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)));
+            ctx.camera = ctx.camera.zoom_uniform(1.1f32.powf(plus_minus * dt * 10.0));
         })
         .draw(|draw, app, _| {
             draw.clear(Col::black());
@@ -69,15 +67,22 @@ fn test() {
             recter.draw();
             recter.transform(rotate_about(1.0, app.pos)).draw();
             drop(recter);
-            // draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
-            //     .border(Col::blue(1.0), 3.0);
-            draw.ellipse([1.0, 0.5, 0.5], (app.pos, [25.0, 15.0]), 32)
+            draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
-            draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
+            draw.round_line(
+                Col::green(0.8),
+                (rect.bottom_left(), rect.top_right()),
+                RoundLine::new(5.0).resolution(4),
+            );
             let font_size = 20.0;
             let text = "Wow, pretty good!";
             let text_left = -200.0;
-            let text_width = draw.line(Col::white(), ([text_left, 0.0], [300.0, 0.0]), 1.0);
+            let text_width = draw.fonts.width(text, font_size);
+            draw.line(
+                Col::white(),
+                [text_left, 0.0, text_left + text_width, 0.0],
+                1.0,
+            );
             draw.text(Col::white(), text, font_size)
                 .transform(translate([text_left, 0.0]));
         })

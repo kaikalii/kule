@@ -14,7 +14,7 @@ use lyon_tessellation::{
     FillOptions, FillTessellator, VertexBuffers,
 };
 
-use crate::{Trans, Transform, Vec2};
+use crate::{KuleError, KuleResult, Trans, Transform, Vec2};
 
 pub use fontdue::Metrics;
 
@@ -100,11 +100,11 @@ impl<G> Fonts<G>
 where
     G: Eq + std::hash::Hash,
 {
-    pub fn load(&mut self, id: G, data: &[u8]) -> crate::Result<()> {
+    pub fn load(&mut self, id: G, data: &[u8]) -> KuleResult<()> {
         self.0.insert(
             id,
             Font::from_bytes(data, Default::default())
-                .map_err(crate::Error::Static)?
+                .map_err(KuleError::Static)?
                 .into(),
         );
         Ok(())

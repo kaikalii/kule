@@ -1,5 +1,5 @@
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum KuleError {
     #[error("{0}")]
     DisplayCreation(#[from] glium::backend::glutin::DisplayCreationError),
     #[error("{0}")]
@@ -10,4 +10,4 @@ pub enum Error {
     BadIcon(#[from] glium::glutin::window::BadIcon),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type KuleResult<T> = std::result::Result<T, KuleError>;

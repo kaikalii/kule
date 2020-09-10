@@ -6,7 +6,7 @@ use vector2math::*;
 pub use monitor::MonitorHandle;
 pub use window::{Fullscreen, WindowId};
 
-use crate::{Camera, Drawer, Event, Fonts, GlyphCache, StateTracker, Vec2};
+use crate::{Camera, Drawer, Event, Fonts, GlyphCache, KuleResult, StateTracker, Vec2};
 
 pub struct Window(Display);
 
@@ -39,7 +39,7 @@ impl Window {
     pub fn set_cursor_visible(&self, visible: bool) {
         self.inner().set_cursor_visible(visible);
     }
-    pub fn set_icon(&self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<()> {
+    pub fn set_icon(&self, rgba: Vec<u8>, width: u32, height: u32) -> KuleResult<()> {
         self.inner()
             .set_window_icon(Some(window::Icon::from_rgba(rgba, width, height)?));
         Ok(())
@@ -81,7 +81,7 @@ impl<G> Context<G>
 where
     G: Copy + Eq + std::hash::Hash,
 {
-    pub fn load_font(&mut self, font_id: G, bytes: &[u8]) -> crate::Result<()> {
+    pub fn load_font(&mut self, font_id: G, bytes: &[u8]) -> KuleResult<()> {
         self.fonts.load(font_id, bytes)
     }
     pub fn glyphs(&self, font_id: G) -> &GlyphCache {
@@ -94,7 +94,7 @@ where
 }
 
 impl Context {
-    pub fn load_only_font(&mut self, bytes: &[u8]) -> crate::Result<()> {
+    pub fn load_only_font(&mut self, bytes: &[u8]) -> KuleResult<()> {
         self.load_font((), bytes)
     }
     pub fn only_glyphs(&self) -> &GlyphCache {
@@ -144,7 +144,7 @@ where
     pub fn new() -> Self {
         AppBuilder::default()
     }
-    pub fn run(mut self, mut app: T) -> crate::Result<()> {
+    pub fn run(mut self, mut app: T) -> KuleResult<()> {
         // Build event loop and display
         #[cfg(not(test))]
         let event_loop = event_loop::EventLoop::new();
@@ -239,7 +239,7 @@ where
     pub fn samples(self, samples: u16) -> Self {
         AppBuilder { samples, ..self }
     }
-    pub fn icon(self, rgba: Vec<u8>, width: u32, height: u32) -> crate::Result<Self> {
+    pub fn icon(self, rgba: Vec<u8>, width: u32, height: u32) -> KuleResult<Self> {
         Ok(AppBuilder {
             icon: Some(window::Icon::from_rgba(rgba, width, height)?),
             ..self

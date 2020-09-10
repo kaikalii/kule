@@ -54,6 +54,12 @@ impl Camera {
             ..self
         }
     }
+    pub fn zoom_uniform(self, zoom: f32) -> Self {
+        Camera {
+            zoom: self.zoom.mul(zoom),
+            ..self
+        }
+    }
     pub fn translate(self, offset: Vec2) -> Self {
         Camera {
             center: self.center.add(offset),
