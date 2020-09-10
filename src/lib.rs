@@ -45,31 +45,31 @@ fn test() {
         pos: Vec2,
     }
     AppBuilder::<App>::new()
-        .setup(|ctx| {
+        .setup(|_, ctx| {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = [4.0; 2];
         })
-        .update(|dt, ctx| {
+        .update(|dt, app, ctx| {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
                 .key_diff2(Key::Left, Key::Right, Key::Up, Key::Down);
             let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
-            ctx.app.pos.add_assign(wasd.mul(100.0 * dt));
+            app.pos.add_assign(wasd.mul(100.0 * dt));
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx
                 .camera
                 .zoom(ctx.camera.zoom.mul(1.1f32.powf(plus_minus * dt * 10.0)));
         })
-        .draw(|draw, ctx| {
+        .draw(|draw, app, _| {
             draw.clear(Col::black());
-            let rect = Rect::centered(ctx.app.pos, [40.0; 2]);
+            let rect = Rect::centered(app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             recter.draw();
-            recter.transform(rotate_about(1.0, ctx.app.pos)).draw();
+            recter.transform(rotate_about(1.0, app.pos)).draw();
             drop(recter);
-            draw.circle([1.0, 0.5, 0.5], (ctx.app.pos, 15.0), 32)
+            draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
             draw.round_line(Col::green(0.8), rect.bottom_left(), rect.top_right(), 5.0);
             draw.line(Col::white(), [-200.0, 0.0], [300.0, 0.0], 1.0);

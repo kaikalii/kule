@@ -49,8 +49,7 @@ impl Window {
     }
 }
 
-pub struct Context<T, G = ()> {
-    pub app: T,
+pub struct Context<G = ()> {
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
@@ -60,7 +59,7 @@ pub struct Context<T, G = ()> {
     fps_timer: Instant,
 }
 
-impl<T, G> Context<T, G> {
+impl<G> Context<G> {
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
@@ -82,7 +81,7 @@ impl<T, G> Context<T, G> {
     }
 }
 
-impl<T, G> Context<T, G>
+impl<G> Context<G>
 where
     G: Copy + Eq + std::hash::Hash + std::fmt::Debug,
 {
@@ -103,7 +102,7 @@ where
     }
 }
 
-impl<T> Context<T> {
+impl Context {
     pub fn load_only_font(&self, bytes: &[u8]) -> crate::Result<()> {
         self.load_font((), bytes)
     }
@@ -120,10 +119,10 @@ pub struct AppBuilder<T, G = ()> {
     pub title: String,
     pub size: [f32; 2],
     pub automatic_close: bool,
-    pub setup: Callback<dyn FnOnce(&mut Context<T, G>)>,
-    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &Context<T, G>)>,
-    pub event: Callback<dyn Fn(Event, &mut Context<T, G>)>,
-    pub update: Callback<dyn Fn(f32, &mut Context<T, G>)>,
+    pub setup: Callback<dyn FnOnce(&mut T, &mut Context<G>)>,
+    pub draw: Callback<dyn Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>)>,
+    pub event: Callback<dyn Fn(Event, &mut T, &mut Context<G>)>,
+    pub update: Callback<dyn Fn(f32, &mut T, &mut Context<G>)>,
     pub update_frequency: f32,
     pub samples: u16,
     pub icon: Option<window::Icon>,
@@ -154,7 +153,7 @@ where
     pub fn new() -> Self {
         AppBuilder::default()
     }
-    pub fn run(mut self, app: T) -> crate::Result<()> {
+    pub fn run(mut self, mut app: T) -> crate::Result<()> {
         // Build event loop and display
         #[cfg(not(test))]
         let event_loop = event_loop::EventLoop::new();
@@ -175,7 +174,6 @@ where
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
         let mut ctx = Context {
-            app,
             program,
             fonts: Default::default(),
             tracker: StateTracker::new(),
@@ -189,7 +187,7 @@ where
             fps_timer: Instant::now(),
         };
         if let Some(setup) = self.setup.take() {
-            setup(&mut ctx)
+            setup(&mut app, &mut ctx)
         }
         // Run the event loop
         event_loop.run(move |event, _, cf| {
@@ -200,7 +198,7 @@ where
                     let dt = (now - ctx.fps_timer).as_secs_f32();
                     ctx.fps_timer = now;
                     ctx.tracker.fps = ctx.tracker.fps.lerp(1.0 / dt, 0.1);
-                    ctx.draw(|drawer| draw(drawer, &ctx));
+                    ctx.draw(|drawer| draw(drawer, &app, &ctx));
                 }
             }
             // Handle events
@@ -209,7 +207,7 @@ where
                     *cf = event_loop::ControlFlow::Exit;
                     break;
                 } else if let Some(handle_event) = &self.event {
-                    handle_event(event, &mut ctx);
+                    handle_event(event, &mut app, &mut ctx);
                 }
             }
             // Update
@@ -218,7 +216,7 @@ where
                 let dt = (now - ctx.update_timer).as_secs_f32();
                 if dt >= 1.0 / self.update_frequency {
                     ctx.update_timer = now;
-                    update(dt, &mut ctx);
+                    update(dt, &mut app, &mut ctx);
                 }
             }
         })
@@ -258,7 +256,7 @@ where
     }
     pub fn setup<F>(self, f: F) -> Self
     where
-        F: FnOnce(&mut Context<T, G>) + 'static,
+        F: FnOnce(&mut T, &mut Context<G>) + 'static,
     {
         AppBuilder {
             setup: Some(Box::new(f)),
@@ -267,7 +265,7 @@ where
     }
     pub fn draw<F>(self, f: F) -> Self
     where
-        F: Fn(&mut Drawer<Frame, Display, G>, &Context<T, G>) + 'static,
+        F: Fn(&mut Drawer<Frame, Display, G>, &T, &Context<G>) + 'static,
     {
         AppBuilder {
             draw: Some(Box::new(f)),
@@ -276,7 +274,7 @@ where
     }
     pub fn event<F>(self, f: F) -> Self
     where
-        F: Fn(Event, &mut Context<T, G>) + 'static,
+        F: Fn(Event, &mut T, &mut Context<G>) + 'static,
     {
         AppBuilder {
             event: Some(Box::new(f)),
@@ -285,7 +283,7 @@ where
     }
     pub fn update<F>(self, f: F) -> Self
     where
-        F: Fn(f32, &mut Context<T, G>) + 'static,
+        F: Fn(f32, &mut T, &mut Context<G>) + 'static,
     {
         AppBuilder {
             update: Some(Box::new(f)),
