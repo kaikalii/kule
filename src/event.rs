@@ -9,7 +9,7 @@ pub use event::ElementState as ButtonState;
 pub use event::ModifiersState as Modifiers;
 pub use event::MouseButton;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     MouseAbsolute(Vec2),
     MouseRelative(Vec2),

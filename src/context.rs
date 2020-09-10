@@ -52,6 +52,7 @@ pub struct Context<G = ()> {
     pub camera: Camera,
     pub window: Window,
     pub fonts: Fonts<G>,
+    pub should_close: bool,
     update_timer: Instant,
     fps_timer: Instant,
 }
@@ -176,6 +177,7 @@ where
                 window_size: window_size.into(),
             },
             window: Window(display),
+            should_close: false,
             update_timer: Instant::now(),
             fps_timer: Instant::now(),
         };
@@ -196,7 +198,8 @@ where
             }
             // Handle events
             for event in Event::from_glutin(event, &mut ctx.tracker, &mut ctx.camera) {
-                if let (Event::CloseRequest, true) = (event, self.automatic_close) {
+                let automatic_close = event == Event::CloseRequest && self.automatic_close;
+                if automatic_close || ctx.should_close {
                     *cf = event_loop::ControlFlow::Exit;
                     if let Some(teardown) = &self.teardown {
                         teardown(&mut app, &mut ctx);
