@@ -93,6 +93,7 @@ impl Camera {
             .translate(self.center.neg())
             .scale([self.zoom; 2].mul2([1.0, -1.0]))
             .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
+            .zoom(2.0)
     }
 }
 

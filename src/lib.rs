@@ -69,7 +69,9 @@ mod test {
         where
             C: Canvas,
         {
-            draw.clear(Col::black());
+            draw.clear(Col::white());
+            let view_rect = draw.camera.view_rect();
+            draw.rectangle(Col::black(), view_rect);
             let rect = Rect::centered(app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             recter.draw();
