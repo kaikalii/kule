@@ -93,13 +93,13 @@ pub trait Color: Copy {
     where
         C: Color,
     {
-        self.map_all_other(other, f32::min)
+        self.map_rgb_other(other, f32::min)
     }
     fn max<C>(self, other: C) -> Self
     where
         C: Color,
     {
-        self.map_all_other(other, f32::max)
+        self.map_rgb_other(other, f32::max)
     }
     fn mul(self, val: f32) -> Self {
         self.map_rgb(|c| c * val)
