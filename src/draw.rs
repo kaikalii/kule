@@ -70,7 +70,7 @@ impl Camera {
         let old_pos = self.pos_to_coords(on);
         let new_cam = self.zoom(zoom);
         let new_pos = new_cam.pos_to_coords(on);
-        new_cam.translate(self.center.add(new_pos.sub(old_pos).neg()))
+        new_cam.translate(new_pos.sub(old_pos).neg())
     }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
@@ -120,6 +120,7 @@ where
     pub fonts: &'ctx Fonts<R::FontId>,
     pub camera: Camera,
     indices: IndicesCache,
+    pub draw_params: DrawParameters<'ctx>,
 }
 
 impl<'ctx, T, R> Drawer<'ctx, T, R>
@@ -141,6 +142,10 @@ where
             fonts,
             camera,
             indices: Default::default(),
+            draw_params: DrawParameters {
+                blend: Blend::alpha_blending(),
+                ..Default::default()
+            },
         }
     }
     pub fn with_camera<C, F, S>(&mut self, camera: C, f: F) -> S
@@ -577,7 +582,7 @@ where
                     indices,
                     self.drawer.program,
                     &uniforms,
-                    &Default::default(),
+                    &self.drawer.draw_params,
                 )
                 .unwrap();
             if let Some((vertices, Border { color, thickness })) = border_vertices.zip(self.border)
@@ -625,7 +630,7 @@ where
                             indices,
                             self.drawer.program,
                             &uniforms,
-                            &Default::default(),
+                            &self.drawer.draw_params,
                         )
                         .unwrap();
                 }
@@ -800,88 +805,15 @@ pub(crate) fn default_shaders<F>(facade: &F) -> Program
 where
     F: Facade,
 {
-    program!(facade,
-        140 => {
-            vertex: "
-                #version 140
-
-                uniform mat4 matrix;
-
-                in vec2 pos;
-                in vec4 color;
-
-                out vec4 vColor;
-
-                void main() {
-                    gl_Position = vec4(pos, 0.0, 1.0) * matrix;
-                    vColor = color;
-                }
-            ",
-
-            fragment: "
-                #version 140
-                in vec4 vColor;
-                out vec4 f_color;
-
-                void main() {
-                    f_color = vColor;
-                }
-            "
-        },
-
-        110 => {
-            vertex: "
-                #version 110
-
-                uniform mat4 matrix;
-
-                attribute vec2 pos;
-                attribute vec4 color;
-
-                varying vec4 vColor;
-
-                void main() {
-                    gl_Position = vec4(pos, 0.0, 1.0) * matrix;
-                    vColor = color;
-                }
-            ",
-
-            fragment: "
-                #version 110
-                varying vec4 vColor;
-
-                void main() {
-                    gl_FragColor = vColor;
-                }
-            ",
-        },
-
-        100 => {
-            vertex: "
-                #version 100
-
-                uniform lowp mat4 matrix;
-
-                attribute lowp vec2 pos;
-                attribute lowp vec4 color;
-
-                varying lowp vec4 vColor;
-
-                void main() {
-                    gl_Position = vec4(pos, 0.0, 1.0) * matrix;
-                    vColor = color;
-                }
-            ",
-
-            fragment: "
-                #version 100
-                varying lowp vec4 vColor;
-
-                void main() {
-                    gl_FragColor = vColor;
-                }
-            ",
+    Program::new(
+        facade,
+        program::SourceCode {
+            vertex_shader: include_str!("shaders/vertex.vert"),
+            fragment_shader: include_str!("shaders/fragment.frag"),
+            tessellation_control_shader: None,
+            tessellation_evaluation_shader: None,
+            geometry_shader: None,
         },
     )
-    .unwrap()
+    .unwrap_or_else(|e| panic!("{}", e))
 }

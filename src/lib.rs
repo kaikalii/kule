@@ -102,7 +102,7 @@ mod test {
                 draw.text(Col::white(), text, font_size)
                     .transform(translate([0.0, font_size]));
             });
-            draw.circle([1.0, 1.0, 0.0], (ctx.mouse_coords(), 5.0), 10);
+            draw.circle([1.0, 1.0, 0.0, 0.3], (ctx.mouse_coords(), 5.0), 10);
         }
         fn teardown(app: Self, _: &mut Context) {
             println!("{:?}", app);
