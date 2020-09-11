@@ -10,9 +10,8 @@ use crate::{
 pub use glium::{backend::Facade, Surface};
 
 #[allow(unused_variables)]
-pub trait App: Sized + 'static {
+pub trait Kule: Sized + 'static {
     type FontId: ResourceId;
-    type SoundId: ResourceId;
     fn build() -> ContextBuilder {
         ContextBuilder::default()
     }

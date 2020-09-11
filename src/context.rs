@@ -6,7 +6,7 @@ use vector2math::*;
 pub use monitor::MonitorHandle;
 pub use window::{Fullscreen, WindowId};
 
-use crate::{App, Camera, Drawer, Fonts, GlyphCache, KuleResult, StateTracker, Vec2};
+use crate::{Camera, Drawer, Fonts, GlyphCache, Kule, KuleResult, StateTracker, Vec2};
 
 pub struct Window(pub(crate) Display);
 
@@ -46,30 +46,30 @@ impl Window {
     }
 }
 
-pub struct Context<T>
+pub struct Context<K>
 where
-    T: App,
+    K: Kule,
 {
     pub program: Program,
     pub tracker: StateTracker,
     pub camera: Camera,
     pub window: Window,
-    pub fonts: Fonts<T::FontId>,
+    pub fonts: Fonts<K::FontId>,
     pub should_close: bool,
     pub(crate) update_timer: Instant,
     pub(crate) fps_timer: Instant,
 }
 
-impl<T> Context<T>
+impl<K> Context<K>
 where
-    T: App,
+    K: Kule,
 {
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
     pub(crate) fn draw<F>(&self, mut f: F)
     where
-        F: FnMut(&mut Drawer<Frame, Display, T::FontId>),
+        F: FnMut(&mut Drawer<Frame, Display, K::FontId>),
     {
         let mut frame = self.window.0.draw();
         let mut drawer = Drawer::new(
@@ -84,25 +84,25 @@ where
     }
 }
 
-impl<T> Context<T>
+impl<K> Context<K>
 where
-    T: App,
+    K: Kule,
 {
-    pub fn load_font(&mut self, font_id: T::FontId, bytes: &[u8]) -> KuleResult<()> {
+    pub fn load_font(&mut self, font_id: K::FontId, bytes: &[u8]) -> KuleResult<()> {
         self.fonts.load(font_id, bytes)
     }
-    pub fn glyphs(&self, font_id: T::FontId) -> &GlyphCache {
+    pub fn glyphs(&self, font_id: K::FontId) -> &GlyphCache {
         self.get_glyphs(font_id)
             .expect("No font loaded for font id")
     }
-    pub fn get_glyphs(&self, font_id: T::FontId) -> Option<&GlyphCache> {
+    pub fn get_glyphs(&self, font_id: K::FontId) -> Option<&GlyphCache> {
         self.fonts.get(font_id)
     }
 }
 
-impl<T> Context<T>
+impl<K> Context<K>
 where
-    T: App<FontId = ()>,
+    K: Kule<FontId = ()>,
 {
     pub fn load_only_font(&mut self, bytes: &[u8]) -> KuleResult<()> {
         self.load_font((), bytes)

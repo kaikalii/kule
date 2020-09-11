@@ -44,17 +44,16 @@ pub fn rotate_about(radians: f32, pivot: Vec2) -> impl Fn(Trans) -> Trans {
 mod test {
     use super::*;
     #[derive(Debug)]
-    struct MyApp {
+    struct App {
         pos: Vec2,
     }
-    impl App for MyApp {
+    impl Kule for App {
         type FontId = ();
-        type SoundId = ();
         fn setup(ctx: &mut Context<Self>) -> Self {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
-            MyApp { pos: [0.0; 2] }
+            App { pos: [0.0; 2] }
         }
         fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self>) {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
@@ -103,6 +102,6 @@ mod test {
 
     #[test]
     fn test() {
-        MyApp::run().unwrap();
+        App::run().unwrap();
     }
 }
