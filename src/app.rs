@@ -3,28 +3,25 @@ use std::{fmt::Debug, hash::Hash, time::Instant};
 use glium::{glutin::*, *};
 
 use crate::{
-    Camera, Context, ContextBuilder, Drawer, Event, FloatingScalar, KuleResult, StateTracker,
-    Window,
+    Camera, Canvas, Context, ContextBuilder, Drawer, Event, FloatingScalar, KuleResult,
+    StateTracker, Window,
 };
-
-pub use glium::{backend::Facade, Surface};
 
 #[allow(unused_variables)]
 pub trait Kule: Sized + 'static {
-    type FontId: ResourceId;
+    type Resources: Resources;
     fn build() -> ContextBuilder {
         ContextBuilder::default()
     }
-    fn setup(ctx: &mut Context<Self>) -> Self;
-    fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self>) {}
-    fn draw<S, F>(draw: &mut Drawer<S, F, Self::FontId>, app: &Self, ctx: &Context<Self>)
+    fn setup(ctx: &mut Context<Self::Resources>) -> Self;
+    fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self::Resources>) {}
+    fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, ctx: &Context<Self::Resources>)
     where
-        S: Surface,
-        F: Facade,
+        C: Canvas,
     {
     }
-    fn event(event: Event, app: &mut Self, ctx: &mut Context<Self>) {}
-    fn teardown(app: Self, ctx: &mut Context<Self>) {}
+    fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {}
+    fn teardown(app: Self, ctx: &mut Context<Self::Resources>) {}
     fn run() -> KuleResult<()> {
         let mut builder = Self::build();
         // Build event loop and display
@@ -100,6 +97,14 @@ pub trait Kule: Sized + 'static {
     }
 }
 
-pub trait ResourceId: Eq + Hash + Debug {}
+pub trait Resources {
+    type FontId: ResourceId;
+}
 
-impl<T> ResourceId for T where T: Eq + Hash + Debug {}
+impl Resources for () {
+    type FontId = ();
+}
+
+pub trait ResourceId: Copy + Eq + Hash + Debug {}
+
+impl<T> ResourceId for T where T: Copy + Eq + Hash + Debug {}

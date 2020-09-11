@@ -48,14 +48,14 @@ mod test {
         pos: Vec2,
     }
     impl Kule for App {
-        type FontId = ();
-        fn setup(ctx: &mut Context<Self>) -> Self {
+        type Resources = ();
+        fn setup(ctx: &mut Context) -> Self {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
             App { pos: [0.0; 2] }
         }
-        fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self>) {
+        fn update(dt: f32, app: &mut Self, ctx: &mut Context) {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
@@ -65,10 +65,9 @@ mod test {
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
         }
-        fn draw<S, F>(draw: &mut Drawer<S, F, Self::FontId>, app: &Self, _: &Context<Self>)
+        fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, _: &Context)
         where
-            S: Surface,
-            F: Facade,
+            C: Canvas,
         {
             draw.clear(Col::black());
             let rect = Rect::centered(app.pos, [40.0; 2]);
@@ -95,7 +94,7 @@ mod test {
             draw.text(Col::white(), text, font_size)
                 .transform(translate([text_left, 0.0]));
         }
-        fn teardown(app: Self, _: &mut Context<Self>) {
+        fn teardown(app: Self, _: &mut Context) {
             println!("{:?}", app);
         }
     }

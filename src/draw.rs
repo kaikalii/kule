@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, rc::Rc};
 use glium::{backend::*, uniforms::*, *};
 use vector2math::*;
 
-use crate::{Col, Color, Fonts, GlyphSize, GlyphSpec, Rect, Trans, Vec2};
+use crate::{Col, Color, Fonts, GlyphSize, GlyphSpec, Rect, Resources, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
@@ -93,27 +93,43 @@ impl Camera {
     }
 }
 
-pub struct Drawer<'ctx, S, F, G> {
-    surface: &'ctx mut S,
-    facade: &'ctx F,
+pub trait Canvas {
+    type Facade: Facade;
+    type Surface: Surface;
+}
+
+pub struct WindowCanvas;
+
+impl Canvas for WindowCanvas {
+    type Facade = Display;
+    type Surface = Frame;
+}
+
+pub struct Drawer<'ctx, T = WindowCanvas, R = ()>
+where
+    T: Canvas,
+    R: Resources,
+{
+    surface: &'ctx mut T::Surface,
+    facade: &'ctx T::Facade,
     program: &'ctx Program,
-    pub fonts: &'ctx Fonts<G>,
+    pub fonts: &'ctx Fonts<R::FontId>,
     pub camera: Camera,
     indices: IndicesCache,
 }
 
-pub type WindowDrawer<'ctx, G = ()> = Drawer<'ctx, Frame, Display, G>;
+pub type WindowDrawer<'ctx, G = ()> = Drawer<'ctx, WindowCanvas, G>;
 
-impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
+impl<'ctx, T, R> Drawer<'ctx, T, R>
 where
-    S: Surface,
-    F: Facade,
+    T: Canvas,
+    R: Resources,
 {
     pub(crate) fn new(
-        surface: &'ctx mut S,
-        facade: &'ctx F,
+        surface: &'ctx mut T::Surface,
+        facade: &'ctx T::Facade,
         program: &'ctx Program,
-        fonts: &'ctx Fonts<G>,
+        fonts: &'ctx Fonts<R::FontId>,
         camera: Camera,
     ) -> Self {
         Drawer {
@@ -125,21 +141,21 @@ where
             indices: Default::default(),
         }
     }
-    pub fn with_camera<C, D, R>(&mut self, camera: C, d: D) -> R
+    pub fn with_camera<C, F, S>(&mut self, camera: C, f: F) -> S
     where
         C: FnOnce(Camera) -> Camera,
-        D: FnOnce(&mut Self) -> R,
+        F: FnOnce(&mut Self) -> S,
     {
         let base_camera = self.camera;
         self.camera = camera(base_camera);
-        let res = d(self);
+        let res = f(self);
         self.camera = base_camera;
         res
     }
 
-    pub fn with_absolute_camera<D, R>(&mut self, d: D) -> R
+    pub fn with_absolute_camera<F, S>(&mut self, f: F) -> S
     where
-        D: FnOnce(&mut Self) -> R,
+        F: FnOnce(&mut Self) -> S,
     {
         let base_camera = self.camera;
         self.with_camera(
@@ -148,7 +164,7 @@ where
                 zoom: 1.0,
                 window_size: base_camera.window_size,
             },
-            d,
+            f,
         )
     }
     pub fn clear<C>(&mut self, color: C)
@@ -158,22 +174,22 @@ where
         self.surface
             .clear_color(color.r(), color.g(), color.b(), color.alpha())
     }
-    pub fn rectangle<C, R>(&mut self, color: C, rect: R) -> Transformable<'ctx, '_, S, F, G>
+    pub fn rectangle<C, E>(&mut self, color: C, rect: E) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
-        R: Rectangle<Scalar = f32>,
+        E: Rectangle<Scalar = f32>,
     {
         Transformable::new(self, color.map(), once(DrawType::Rectangle(rect.map())))
     }
-    pub fn circle<C, R>(
+    pub fn circle<C, E>(
         &mut self,
         color: C,
-        circ: R,
+        circ: E,
         resolution: u16,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
-        R: Circle<Scalar = f32>,
+        E: Circle<Scalar = f32>,
     {
         Transformable::new(
             self,
@@ -190,7 +206,7 @@ where
         color: C,
         ellip: E,
         resolution: u16,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
         E: Rectangle<Scalar = f32>,
@@ -205,11 +221,7 @@ where
             }),
         )
     }
-    pub fn polygon<'p, C, V, P>(
-        &mut self,
-        color: C,
-        vertices: P,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
         V: Vector2<Scalar = f32> + 'p,
@@ -228,7 +240,7 @@ where
         primitive: PrimitiveType,
         vertices: V,
         indices: I,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, T, R>
     where
         V: IntoIterator<Item = Vertex>,
         I: IntoIterator<Item = u16>,
@@ -254,7 +266,7 @@ where
         color: C,
         endpoints: P,
         thickness: f32,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
         P: Pair,
@@ -302,17 +314,17 @@ impl From<f32> for RoundLine {
     }
 }
 
-impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
+impl<'ctx, T, R> Drawer<'ctx, T, R>
 where
-    S: Surface,
-    F: Facade,
+    T: Canvas,
+    R: Resources,
 {
     pub fn round_line<C, P, L>(
         &mut self,
         color: C,
         endpoints: P,
         rl: L,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    ) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
         P: Pair,
@@ -345,23 +357,15 @@ where
             .collect();
         self.polygon(color, &vertices)
     }
-}
-
-impl<'ctx, S, F, G> Drawer<'ctx, S, F, G>
-where
-    S: Surface,
-    F: Facade,
-    G: Copy + Eq + std::hash::Hash,
-{
     pub fn character<'drawer, C, L>(
         &'drawer mut self,
         color: C,
         ch: char,
         spec: L,
-    ) -> Transformable<'ctx, 'drawer, S, F, G>
+    ) -> Transformable<'ctx, 'drawer, T, R>
     where
         C: Color,
-        L: Into<GlyphSpec<G>>,
+        L: Into<GlyphSpec<R::FontId>>,
     {
         let color: Col = color.map();
         let spec = spec.into();
@@ -386,15 +390,10 @@ where
             Transformable::new(self, color, once(DrawType::Empty))
         }
     }
-    pub fn text<C, L>(
-        &mut self,
-        color: C,
-        string: &str,
-        spec: L,
-    ) -> Transformable<'ctx, '_, S, F, G>
+    pub fn text<C, L>(&mut self, color: C, string: &str, spec: L) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
-        L: Into<GlyphSpec<G>>,
+        L: Into<GlyphSpec<R::FontId>>,
     {
         use fontdue::layout::*;
         let color: Col = color.map();
@@ -474,12 +473,12 @@ struct Border {
     thickness: f32,
 }
 
-pub struct Transformable<'ctx, 'drawer, S, F, G>
+pub struct Transformable<'ctx, 'drawer, T, R>
 where
-    S: Surface,
-    F: Facade,
+    T: Canvas,
+    R: Resources,
 {
-    drawer: &'drawer mut Drawer<'ctx, S, F, G>,
+    drawer: &'drawer mut Drawer<'ctx, T, R>,
     tys: Rc<Vec<DrawType>>,
     color: Col,
     drawn: bool,
@@ -487,12 +486,12 @@ where
     border: Option<Border>,
 }
 
-impl<'ctx, 'drawer, S, F, G> Transformable<'ctx, 'drawer, S, F, G>
+impl<'ctx, 'drawer, T, R> Transformable<'ctx, 'drawer, T, R>
 where
-    S: Surface,
-    F: Facade,
+    T: Canvas,
+    R: Resources,
 {
-    pub fn color<'tfbl, C>(&'tfbl mut self, color: C) -> Transformable<'ctx, 'tfbl, S, F, G>
+    pub fn color<'tfbl, C>(&'tfbl mut self, color: C) -> Transformable<'ctx, 'tfbl, T, R>
     where
         C: Color,
     {
@@ -509,7 +508,7 @@ where
     pub fn transform<'tfbl, D>(
         &'tfbl mut self,
         transformation: D,
-    ) -> Transformable<'ctx, 'tfbl, S, F, G>
+    ) -> Transformable<'ctx, 'tfbl, T, R>
     where
         D: Fn(Trans) -> Trans,
     {
@@ -527,7 +526,7 @@ where
         &'tfbl mut self,
         color: C,
         thickness: f32,
-    ) -> Transformable<'ctx, 'tfbl, S, F, G>
+    ) -> Transformable<'ctx, 'tfbl, T, R>
     where
         C: Color,
     {
@@ -544,7 +543,7 @@ where
             drawn: false,
         }
     }
-    pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, S, F, G> {
+    pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, T, R> {
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
@@ -632,7 +631,7 @@ where
         }
         self.drawn = true;
     }
-    fn new<I>(drawer: &'drawer mut Drawer<'ctx, S, F, G>, color: Col, tys: I) -> Self
+    fn new<I>(drawer: &'drawer mut Drawer<'ctx, T, R>, color: Col, tys: I) -> Self
     where
         I: IntoIterator<Item = DrawType>,
     {
@@ -701,10 +700,10 @@ where
     }
 }
 
-impl<'ctx, 'drawer, S, F, G> Drop for Transformable<'ctx, 'drawer, S, F, G>
+impl<'ctx, 'drawer, T, R> Drop for Transformable<'ctx, 'drawer, T, R>
 where
-    S: Surface,
-    F: Facade,
+    T: Canvas,
+    R: Resources,
 {
     fn drop(&mut self) {
         if !self.drawn {
