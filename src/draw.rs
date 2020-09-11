@@ -75,7 +75,7 @@ impl Camera {
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
             .div(self.zoom)
-            .mul(2.0)
+            // .mul(2.0)
             .add(self.center)
     }
     pub fn coords_to_pos(self, coords: Vec2) -> Vec2 {

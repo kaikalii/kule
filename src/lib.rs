@@ -65,7 +65,16 @@ mod test {
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
         }
-        fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, _: &Context)
+        fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {
+            if let Event::MouseButton {
+                button: MouseButton::Left,
+                state: ButtonState::Pressed,
+            } = event
+            {
+                app.pos = ctx.mouse_coords();
+            }
+        }
+        fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, ctx: &Context)
         where
             C: Canvas,
         {
@@ -84,17 +93,16 @@ mod test {
                 (rect.bottom_left(), rect.top_right()),
                 RoundLine::new(5.0).resolution(4),
             );
-            let font_size = 20.0;
-            let text = "Wow, pretty good!";
-            let text_left = -200.0;
-            let text_width = draw.fonts.width(text, font_size);
-            draw.line(
-                Col::white(),
-                [text_left, 0.0, text_left + text_width, 0.0],
-                1.0,
-            );
-            draw.text(Col::white(), text, font_size)
-                .transform(translate([text_left, 0.0]));
+            draw.with_absolute_camera(|draw| {
+                let font_size = 50.0;
+                // let text = "Wow, pretty good!";
+                let text = "aaaaaaaa";
+                let text_width = draw.fonts.width(text, font_size);
+                draw.line(Col::white(), [2.0, font_size, text_width, font_size], 1.0);
+                draw.text(Col::white(), text, font_size)
+                    .transform(translate([0.0, font_size]));
+            });
+            draw.circle([1.0, 1.0, 0.0], (ctx.mouse_coords(), 5.0), 10);
         }
         fn teardown(app: Self, _: &mut Context) {
             println!("{:?}", app);
