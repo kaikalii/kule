@@ -118,8 +118,6 @@ where
     indices: IndicesCache,
 }
 
-pub type WindowDrawer<'ctx, G = ()> = Drawer<'ctx, WindowCanvas, G>;
-
 impl<'ctx, T, R> Drawer<'ctx, T, R>
 where
     T: Canvas,
