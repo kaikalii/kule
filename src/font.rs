@@ -126,7 +126,7 @@ where
             },
             &mut gps,
         );
-        gps.into_iter().map(|gp| gp.width as f32).sum::<f32>() * spec.size.ratio()
+        gps.last().map(|gp| gp.x + gp.width as f32).unwrap_or(0.0) * spec.size.ratio()
     }
 }
 
