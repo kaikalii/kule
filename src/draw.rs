@@ -85,6 +85,9 @@ impl Camera {
             .mul(self.zoom)
             .add(self.window_size.div(2.0))
     }
+    pub fn view_rect(self) -> Rect {
+        Rect::centered(self.center, self.window_size.div(self.zoom))
+    }
     fn transform(&self) -> Trans {
         trans()
             .translate(self.center.neg())
