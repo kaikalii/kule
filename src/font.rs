@@ -3,7 +3,6 @@ use std::{
     collections::{HashMap, HashSet},
     iter::once,
     ops::{Deref, Index},
-    rc::Rc,
 };
 
 use fontdue::{layout::*, *};
@@ -46,7 +45,7 @@ impl GlyphSize {
     }
     /// Get the scale transform for scaling glyph vertices
     pub fn transform(&self) -> Trans {
-        Trans::new().zoom(self.ratio())
+        Trans::identity().zoom(self.ratio())
     }
 }
 
@@ -150,7 +149,7 @@ impl Deref for Fonts {
 #[derive(Debug, Clone)]
 pub struct GlyphGeometry {
     pub vertices: Vec<Vec2>,
-    pub indices: Rc<Vec<u16>>,
+    pub indices: Vec<u16>,
 }
 
 pub struct GlyphCache {
@@ -267,7 +266,7 @@ impl GlyphCache {
         tessellator
             .tessellate_path(&path, &FillOptions::default(), &mut vertex_builder)
             .unwrap();
-        let indices = Rc::new(buffers.indices);
+        let indices = buffers.indices;
         let vertices: Vec<Vec2> = buffers.vertices.into_iter().map(|v| [v.x, v.y]).collect();
         (metrics, GlyphGeometry { indices, vertices })
     }

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, hash::Hash, time::Instant};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData, time::Instant};
 
 use glium::{glutin::*, *};
 
@@ -98,14 +98,30 @@ pub trait Kule: Sized + 'static {
     }
 }
 
-pub trait Resources {
+pub trait Resources: Copy + Eq + Hash {
     type FontId: ResourceId;
+    type MeshId: ResourceId;
 }
 
 impl Resources for () {
     type FontId = ();
+    type MeshId = ();
 }
 
 pub trait ResourceId: Copy + Eq + Hash + Debug {}
 
 impl<T> ResourceId for T where T: Copy + Eq + Hash + Debug {}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GenericResources<F, M>(PhantomData<F>, PhantomData<M>);
+
+impl<F, M> Resources for GenericResources<F, M>
+where
+    F: ResourceId,
+    M: ResourceId,
+{
+    type FontId = F;
+    type MeshId = M;
+}
+
+pub type VaryMeshes<M> = GenericResources<(), M>;

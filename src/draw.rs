@@ -1,34 +1,21 @@
 use std::{collections::HashMap, iter::once, rc::Rc};
 
-use glium::{backend::*, uniforms::*, *};
+use glium::{backend::*, *};
 use vector2math::*;
 
 use crate::{Col, Color, Fonts, GlyphSize, GlyphSpec, Rect, Resources, Trans, Vec2};
 
 pub use index::PrimitiveType;
 
-/// Satisfy a rust-analyzer bug
-fn trans() -> Trans {
-    Transform::new()
-}
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vertex {
     pub pos: Vec2,
-    pub color: Col,
 }
 
-implement_vertex!(Vertex, pos, color);
+implement_vertex!(Vertex, pos);
 
-fn uniforms() -> UniformsStorage<'static, [[f32; 4]; 4], EmptyUniforms> {
-    uniform! {
-        matrix: [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0]
-        ]
-    }
+fn extend_transform(trans: Trans) -> [[f32; 3]; 3] {
+    [trans[0], trans[1], [0.0, 0.0, 1.0]]
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,7 +76,7 @@ impl Camera {
         Rect::centered(self.center, self.window_size.div(self.zoom))
     }
     fn transform(&self) -> Trans {
-        trans()
+        Trans::identity()
             .translate(self.center.neg())
             .scale([self.zoom; 2].mul2([1.0, -1.0]))
             .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
@@ -119,7 +106,7 @@ where
     program: &'ctx Program,
     pub fonts: &'ctx Fonts<R::FontId>,
     pub camera: Camera,
-    indices: IndicesCache,
+    meshes: HashMap<DrawType<R>, (VertexBuffer<Vertex>, IndexBuffer<u16>)>,
     pub draw_params: DrawParameters<'ctx>,
 }
 
@@ -141,7 +128,7 @@ where
             program,
             fonts,
             camera,
-            indices: Default::default(),
+            meshes: HashMap::new(),
             draw_params: DrawParameters {
                 blend: Blend::alpha_blending(),
                 ..Default::default()
@@ -186,7 +173,15 @@ where
         C: Color,
         E: Rectangle<Scalar = f32>,
     {
-        Transformable::new(self, color.map(), once(DrawType::Rectangle(rect.map())))
+        let rect: [f32; 4] = rect.map();
+        Transformable::new(
+            self,
+            color.map(),
+            DrawType::Regular(4),
+            Trans::identity()
+                .scale(rect.size().mul(0.5 * std::f32::consts::SQRT_2))
+                .translate(rect.center()),
+        )
     }
     pub fn circle<C, E>(
         &mut self,
@@ -201,11 +196,10 @@ where
         Transformable::new(
             self,
             color.map(),
-            once(DrawType::Ellipse {
-                center: circ.center().map(),
-                radii: circ.radius().square(),
-                resolution,
-            }),
+            DrawType::Regular(resolution),
+            Trans::identity()
+                .zoom(circ.radius())
+                .translate(circ.center()),
         )
     }
     pub fn ellipse<C, E>(
@@ -221,55 +215,53 @@ where
         Transformable::new(
             self,
             color.map(),
-            once(DrawType::Ellipse {
-                center: ellip.center().map(),
-                radii: ellip.size().div(2.0).map(),
-                resolution,
-            }),
+            DrawType::Regular(resolution),
+            Trans::identity()
+                .scale(ellip.size().div(2.0))
+                .translate(ellip.center()),
         )
     }
-    pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'ctx, '_, T, R>
+    pub fn polygon<'p, C, V, P>(
+        &mut self,
+        mesh_id: R::MeshId,
+        color: C,
+        vertices: P,
+    ) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
         V: Vector2<Scalar = f32> + 'p,
         P: IntoIterator<Item = &'p V>,
     {
+        let vertices = VertexBuffer::new(
+            self.facade,
+            &vertices
+                .into_iter()
+                .map(|v| Vertex { pos: v.map() })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let len = vertices.len() as u16;
+        let indices = IndexBuffer::new(
+            self.facade,
+            PrimitiveType::TrianglesList,
+            &(1..(len - 2))
+                .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
+                .chain(once(0).chain(once(len - 2)).chain(once(len - 1)))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        self.meshes
+            .insert(DrawType::Irregular(mesh_id), (vertices, indices));
         Transformable::new(
             self,
             color.map(),
-            once(DrawType::Polygon(
-                vertices.into_iter().map(|v| v.map()).collect(),
-            )),
-        )
-    }
-    pub fn generic<V, I>(
-        &mut self,
-        primitive: PrimitiveType,
-        vertices: V,
-        indices: I,
-    ) -> Transformable<'ctx, '_, T, R>
-    where
-        V: IntoIterator<Item = Vertex>,
-        I: IntoIterator<Item = u16>,
-    {
-        Transformable::new(
-            self,
-            [1.0; 4],
-            once(DrawType::Generic {
-                vertices: vertices.into_iter().collect(),
-                indices: Box::new(
-                    IndexBuffer::new(
-                        self.facade,
-                        primitive,
-                        &indices.into_iter().collect::<Vec<_>>(),
-                    )
-                    .unwrap(),
-                ),
-            }),
+            DrawType::Irregular(mesh_id),
+            Trans::identity(),
         )
     }
     pub fn line<C, P>(
         &mut self,
+        mesh_id: R::MeshId,
         color: C,
         endpoints: P,
         thickness: f32,
@@ -282,12 +274,17 @@ where
         let (a, b) = endpoints.to_pair();
         let a: Vec2 = a.map();
         let b: Vec2 = b.map();
+        // let midpoint = a.lerp(b, 0.5);
         let perp = b
             .sub(a)
             .unit()
             .rotate_about(f32::TAU / 4.0, 0.0.square())
             .mul(thickness / 2.0);
-        self.polygon(color, &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)])
+        self.polygon(
+            mesh_id,
+            color,
+            &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)],
+        )
     }
 }
 
@@ -328,6 +325,7 @@ where
 {
     pub fn round_line<C, P, L>(
         &mut self,
+        mesh_id: R::MeshId,
         color: C,
         endpoints: P,
         rl: L,
@@ -362,7 +360,7 @@ where
                 b_start.rotate_about(angle, b_center)
             }))
             .collect();
-        self.polygon(color, &vertices)
+        self.polygon(mesh_id, color, &vertices)
     }
     pub fn character<'drawer, C, L>(
         &'drawer mut self,
@@ -377,25 +375,16 @@ where
         let color: Col = color.map();
         let spec = spec.into();
         let scale_trans = GlyphSize::transform(&spec.size);
-        if let Some(glyphs) = self.fonts.get(spec.font_id) {
-            let glyph = glyphs.glyph(ch, spec.size.resolution).1.clone();
-            Transformable::new(
-                self,
-                color,
-                once(DrawType::Character {
-                    vertices: glyph
-                        .vertices
-                        .into_iter()
-                        .map(|v| v.transform(scale_trans))
-                        .collect(),
-                    indices: glyph.indices,
-                    ch,
-                    resolution: spec.size.resolution,
-                }),
-            )
-        } else {
-            Transformable::new(self, color, once(DrawType::Empty))
-        }
+        Transformable::new(
+            self,
+            color,
+            DrawType::Character {
+                ch,
+                resolution: spec.size.resolution,
+                font_id: spec.font_id,
+            },
+            Trans::identity().then(scale_trans),
+        )
     }
     pub fn text<C, L>(&mut self, color: C, string: &str, spec: L) -> Transformable<'ctx, '_, T, R>
     where
@@ -419,59 +408,106 @@ where
             let buffers: Vec<_> = gps
                 .into_iter()
                 .map(|gp| {
-                    let (_, glyph) = &*glyphs.glyph(gp.key.c, spec.size.resolution);
                     let offset = [
                         gp.x,
                         -(spec.size.resolution as f32 + gp.y + gp.height as f32),
                     ];
-                    (
-                        glyph
-                            .vertices
-                            .iter()
-                            .map(|v| v.add(offset).transform(scale_trans))
-                            .collect(),
-                        glyph.indices.clone(),
-                        gp.key.c,
-                    )
+                    (offset, gp.key.c)
                 })
                 .collect();
-            Transformable::new(
+            Transformable::multi(
                 self,
                 color,
-                buffers
-                    .into_iter()
-                    .map(|(vertices, indices, ch)| DrawType::Character {
-                        vertices,
-                        indices,
-                        ch,
-                        resolution: spec.size.resolution,
-                    }),
+                buffers.into_iter().map(|(offset, ch)| {
+                    (
+                        DrawType::Character {
+                            ch,
+                            resolution: spec.size.resolution,
+                            font_id: spec.font_id,
+                        },
+                        scale_trans.translate(offset),
+                    )
+                }),
+                Trans::identity(),
             )
         } else {
-            Transformable::new(self, color, once(DrawType::Empty))
+            Transformable::new(self, color, DrawType::Empty, Trans::identity())
         }
     }
 }
 
-enum DrawType {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum DrawType<R>
+where
+    R: Resources,
+{
     Empty,
-    Rectangle(Rect),
-    Ellipse {
-        center: Vec2,
-        radii: Vec2,
-        resolution: u16,
-    },
-    Polygon(Vec<Vec2>),
-    Generic {
-        vertices: Vec<Vertex>,
-        indices: Box<IndexBuffer<u16>>,
-    },
+    Regular(u16),
+    Irregular(R::MeshId),
     Character {
-        vertices: Vec<Vec2>,
-        indices: Rc<Vec<u16>>,
         ch: char,
         resolution: u32,
+        font_id: R::FontId,
     },
+}
+
+impl<R> DrawType<R>
+where
+    R: Resources,
+{
+    fn vertices_indices<F>(
+        self,
+        facade: &F,
+        fonts: &Fonts<R::FontId>,
+    ) -> (VertexBuffer<Vertex>, IndexBuffer<u16>)
+    where
+        F: Facade,
+    {
+        match self {
+            DrawType::Empty => (
+                VertexBuffer::empty(facade, 0).unwrap(),
+                IndexBuffer::empty(facade, PrimitiveType::Points, 0).unwrap(),
+            ),
+            DrawType::Regular(n) => {
+                let angle_offset = f32::TAU / n as f32 / 2.0;
+                let vertices: Vec<Vertex> = (0..n)
+                    .map(|i| (i as f32 / n as f32 * f32::TAU + angle_offset).angle_as_vector())
+                    .map(|pos| Vertex { pos })
+                    .collect();
+                let indices: Vec<u16> = (1..(n - 2))
+                    .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
+                    .chain(once(0).chain(once(n - 2)).chain(once(n - 1)))
+                    .collect();
+                (
+                    VertexBuffer::new(facade, &vertices).unwrap(),
+                    IndexBuffer::new(facade, PrimitiveType::TrianglesList, &indices).unwrap(),
+                )
+            }
+            DrawType::Irregular(_) => {
+                panic!("called DrawType::vertices_indices on DrawType::Irregular")
+            }
+            DrawType::Character {
+                ch,
+                resolution,
+                font_id,
+            } => {
+                let (_, geometry) = &*fonts[font_id].glyph(ch, resolution);
+                let vertices = VertexBuffer::new(
+                    facade,
+                    &geometry
+                        .vertices
+                        .iter()
+                        .map(|&pos| Vertex { pos })
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
+                let indices =
+                    IndexBuffer::new(facade, PrimitiveType::TrianglesList, &geometry.indices)
+                        .unwrap();
+                (vertices, indices)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -486,7 +522,7 @@ where
     R: Resources,
 {
     drawer: &'drawer mut Drawer<'ctx, T, R>,
-    tys: Rc<Vec<DrawType>>,
+    tys: Rc<Vec<(DrawType<R>, Trans)>>,
     color: Col,
     drawn: bool,
     transform: Trans,
@@ -507,7 +543,7 @@ where
             drawer: self.drawer,
             tys: Rc::clone(&self.tys),
             color: color.map(),
-            transform: trans(),
+            transform: Trans::identity(),
             border: self.border,
             drawn: false,
         }
@@ -562,147 +598,106 @@ where
         }
     }
     pub fn draw(&mut self) {
-        let uniforms = uniforms();
-        let transform = self.drawer.camera.transform();
-        for ty in &*self.tys {
-            let mut vertices = self.unscaled_vertices(ty);
-            for v in &mut vertices {
-                v.pos = v.pos.transform(self.transform);
-            }
-            let border_vertices = self.border.as_ref().map(|_| vertices.clone());
-            for v in &mut vertices {
-                v.pos = v.pos.transform(transform);
-            }
-            let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
-            let indices = self.drawer.indices.get(ty, self.drawer.facade);
-            self.drawer
-                .surface
-                .draw(
-                    &vertices,
-                    indices,
-                    self.drawer.program,
-                    &uniforms,
-                    &self.drawer.draw_params,
-                )
+        let camera_transform = self.drawer.camera.transform();
+        for (ty, trans) in &*self.tys {
+            let Drawer {
+                meshes,
+                facade,
+                fonts,
+                surface,
+                program,
+                draw_params,
+                ..
+            } = &mut self.drawer;
+            let (vertices, indices) = meshes
+                .entry(*ty)
+                .or_insert_with(|| ty.vertices_indices(*facade, fonts));
+            let transform = self.transform.then(*trans).then(camera_transform);
+            let uniforms = uniform! {
+                transform: extend_transform(transform),
+                color: self.color
+            };
+            surface
+                .draw(&*vertices, &*indices, program, &uniforms, draw_params)
                 .unwrap();
-            if let Some((vertices, Border { color, thickness })) = border_vertices.zip(self.border)
-            {
-                if let Some(rect) = f32::Rect::bounding(vertices.iter().map(|v| v.pos)) {
-                    let len = vertices.len() as u16;
-                    let facade = self.drawer.facade;
-                    let indices =
-                        self.drawer
-                            .indices
-                            .get_or_insert(IndicesType::Border(len), || {
-                                IndexBuffer::new(
-                                    facade,
-                                    PrimitiveType::TriangleStrip,
-                                    &(0..(len * 2))
-                                        .chain(once(0))
-                                        .chain(once(1))
-                                        .collect::<Vec<_>>(),
-                                )
-                                .unwrap()
-                            });
-                    let center = rect.center();
-                    let radius = thickness / 2.0;
-                    let vertices = vertices
-                        .into_iter()
-                        .flat_map(|v| {
-                            let diff = v.pos.sub(center);
-                            let length = diff.mag();
-                            let unit = diff.unit();
-                            once(Vertex {
-                                pos: center.add(unit.mul(length + radius)).transform(transform),
-                                color,
-                            })
-                            .chain(once(Vertex {
-                                pos: center.add(unit.mul(length - radius)).transform(transform),
-                                color,
-                            }))
-                        })
-                        .collect::<Vec<_>>();
-                    let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
-                    self.drawer
-                        .surface
-                        .draw(
-                            &vertices,
-                            indices,
-                            self.drawer.program,
-                            &uniforms,
-                            &self.drawer.draw_params,
-                        )
-                        .unwrap();
-                }
-            }
+            // // Draw border
+            // if let Some((vertices, Border { color, thickness })) = border_vertices.zip(self.border)
+            // {
+            //     if let Some(rect) = f32::Rect::bounding(vertices.iter().map(|v| v.pos)) {
+            //         let len = vertices.len() as u16;
+            //         let facade = self.drawer.facade;
+            //         let indices =
+            //             self.drawer
+            //                 .indices
+            //                 .get_or_insert(IndicesType::Border(len), || {
+            //                     IndexBuffer::new(
+            //                         facade,
+            //                         PrimitiveType::TriangleStrip,
+            //                         &(0..(len * 2))
+            //                             .chain(once(0))
+            //                             .chain(once(1))
+            //                             .collect::<Vec<_>>(),
+            //                     )
+            //                     .unwrap()
+            //                 });
+            //         let center = rect.center();
+            //         let radius = thickness / 2.0;
+            //         let vertices = vertices
+            //             .into_iter()
+            //             .flat_map(|v| {
+            //                 let diff = v.pos.sub(center);
+            //                 let length = diff.mag();
+            //                 let unit = diff.unit();
+            //                 once(Vertex {
+            //                     pos: center.add(unit.mul(length + radius)).transform(transform),
+            //                     color,
+            //                 })
+            //                 .chain(once(Vertex {
+            //                     pos: center.add(unit.mul(length - radius)).transform(transform),
+            //                     color,
+            //                 }))
+            //             })
+            //             .collect::<Vec<_>>();
+            //         let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
+            //         self.drawer
+            //             .surface
+            //             .draw(
+            //                 &vertices,
+            //                 indices,
+            //                 self.drawer.program,
+            //                 &uniforms,
+            //                 &self.drawer.draw_params,
+            //             )
+            //             .unwrap();
+            //     }
+            // }
         }
         self.drawn = true;
     }
-    fn new<I>(drawer: &'drawer mut Drawer<'ctx, T, R>, color: Col, tys: I) -> Self
+    fn new(
+        drawer: &'drawer mut Drawer<'ctx, T, R>,
+        color: Col,
+        ty: DrawType<R>,
+        transform: Trans,
+    ) -> Self {
+        Transformable::multi(drawer, color, once((ty, Trans::identity())), transform)
+    }
+    fn multi<I>(
+        drawer: &'drawer mut Drawer<'ctx, T, R>,
+        color: Col,
+        tys: I,
+        transform: Trans,
+    ) -> Self
     where
-        I: IntoIterator<Item = DrawType>,
+        I: IntoIterator<Item = (DrawType<R>, Trans)>,
     {
         Transformable {
             drawer,
             tys: Rc::new(tys.into_iter().collect()),
             color,
-            transform: trans(),
+            transform,
             drawn: false,
             border: None,
-        }
-    }
-    fn unscaled_vertices(&self, ty: &DrawType) -> Vec<Vertex> {
-        match ty {
-            DrawType::Empty => Vec::new(),
-            DrawType::Rectangle(rect) => vec![
-                Vertex {
-                    pos: rect.top_left(),
-                    color: self.color,
-                },
-                Vertex {
-                    pos: rect.top_right(),
-                    color: self.color,
-                },
-                Vertex {
-                    pos: rect.bottom_right(),
-                    color: self.color,
-                },
-                Vertex {
-                    pos: rect.bottom_left(),
-                    color: self.color,
-                },
-            ],
-            DrawType::Ellipse {
-                center,
-                radii: [a, b],
-                resolution,
-            } => (0..*resolution)
-                .map(|i| Vertex {
-                    pos: center.add({
-                        let angle = i as f32 / *resolution as f32 * f32::TAU;
-                        let r = a * b
-                            / ((b * angle.cos()).powf(2.0) + (a * angle.sin()).powf(2.0)).sqrt();
-                        angle.angle_as_vector().mul(r)
-                    }),
-                    color: self.color,
-                })
-                .collect::<Vec<_>>(),
-            DrawType::Polygon(ref vertices) => vertices
-                .iter()
-                .map(|&v| Vertex {
-                    pos: v,
-                    color: self.color,
-                })
-                .collect::<Vec<_>>(),
-            DrawType::Generic { ref vertices, .. } => vertices.clone(),
-            DrawType::Character { vertices, .. } => vertices
-                .iter()
-                .copied()
-                .map(|pos| Vertex {
-                    pos,
-                    color: self.color,
-                })
-                .collect::<Vec<_>>(),
         }
     }
 }
@@ -716,88 +711,6 @@ where
         if !self.drawn {
             self.draw();
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum IndicesType {
-    Empty,
-    Rectangle,
-    Ellipse(u16),
-    Polygon(u16),
-    Border(u16),
-    Character { ch: char, resolution: u32 },
-}
-
-#[derive(Default)]
-struct IndicesCache {
-    map: HashMap<IndicesType, IndexBuffer<u16>>,
-}
-
-impl IndicesCache {
-    #[allow(clippy::transmute_float_to_int)]
-    fn get<'ctx, F>(&'ctx mut self, draw_type: &'ctx DrawType, facade: &F) -> &'ctx IndexBuffer<u16>
-    where
-        F: Facade,
-    {
-        match draw_type {
-            DrawType::Empty => self.get_or_insert(IndicesType::Empty, || {
-                IndexBuffer::empty(facade, PrimitiveType::Points, 0).unwrap()
-            }),
-            DrawType::Rectangle(_) => self.get_or_insert(IndicesType::Rectangle, || {
-                IndexBuffer::new(facade, PrimitiveType::TrianglesList, &[0, 1, 2, 2, 3, 0]).unwrap()
-            }),
-            DrawType::Ellipse { resolution, .. } => {
-                self.get_or_insert(IndicesType::Ellipse(*resolution), || {
-                    IndexBuffer::new(
-                        facade,
-                        PrimitiveType::TrianglesList,
-                        &(1..(*resolution - 2))
-                            .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
-                            .chain(
-                                once(0)
-                                    .chain(once(*resolution - 2))
-                                    .chain(once(*resolution - 1)),
-                            )
-                            .collect::<Vec<_>>(),
-                    )
-                    .unwrap()
-                })
-            }
-            DrawType::Polygon(vertices) => {
-                let vertices = vertices.len() as u16;
-                self.get_or_insert(IndicesType::Polygon(vertices), || {
-                    IndexBuffer::new(
-                        facade,
-                        PrimitiveType::TrianglesList,
-                        &(1..(vertices - 2))
-                            .flat_map(|n| once(0).chain(once(n)).chain(once(n + 1)))
-                            .chain(once(0).chain(once(vertices - 2)).chain(once(vertices - 1)))
-                            .collect::<Vec<_>>(),
-                    )
-                    .unwrap()
-                })
-            }
-            DrawType::Generic { indices, .. } => indices,
-            DrawType::Character {
-                indices,
-                ch,
-                resolution,
-                ..
-            } => self.get_or_insert(
-                IndicesType::Character {
-                    ch: *ch,
-                    resolution: *resolution,
-                },
-                || IndexBuffer::new(facade, PrimitiveType::TrianglesList, indices).unwrap(),
-            ),
-        }
-    }
-    fn get_or_insert<G>(&mut self, it: IndicesType, g: G) -> &IndexBuffer<u16>
-    where
-        G: FnMut() -> IndexBuffer<u16>,
-    {
-        self.map.entry(it).or_insert_with(g)
     }
 }
 

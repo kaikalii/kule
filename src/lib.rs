@@ -47,15 +47,16 @@ mod test {
     struct App {
         pos: Vec2,
     }
+    type Recs = VaryMeshes<&'static str>;
     impl Kule for App {
-        type Resources = ();
-        fn setup(ctx: &mut Context) -> Self {
+        type Resources = Recs;
+        fn setup(ctx: &mut Context<Recs>) -> Self {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
             App { pos: [0.0; 2] }
         }
-        fn update(dt: f32, app: &mut Self, ctx: &mut Context) {
+        fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) {
             let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
@@ -65,7 +66,7 @@ mod test {
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
         }
-        fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {
+        fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) {
             if let Event::MouseButton {
                 button: MouseButton::Left,
                 state: ButtonState::Pressed,
@@ -74,7 +75,7 @@ mod test {
                 app.pos = ctx.mouse_coords();
             }
         }
-        fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, ctx: &Context)
+        fn draw<C>(draw: &mut Drawer<C, Recs>, app: &Self, ctx: &Context<Recs>)
         where
             C: Canvas,
         {
@@ -89,6 +90,7 @@ mod test {
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border(Col::blue(1.0), 3.0);
             draw.round_line(
+                "round line",
                 Col::green(0.8),
                 (rect.bottom_left(), rect.top_right()),
                 RoundLine::new(5.0).resolution(4),
@@ -98,13 +100,18 @@ mod test {
                 // let text = "Wow, pretty good!";
                 let text = "aaaaaaaa";
                 let text_width = draw.fonts.width(text, font_size);
-                draw.line(Col::white(), [2.0, font_size, text_width, font_size], 1.0);
+                draw.line(
+                    "text underline",
+                    Col::white(),
+                    [2.0, font_size, text_width, font_size],
+                    1.0,
+                );
                 draw.text(Col::white(), text, font_size)
                     .transform(translate([0.0, font_size]));
             });
             draw.circle([1.0, 1.0, 0.0, 0.3], (ctx.mouse_coords(), 5.0), 10);
         }
-        fn teardown(app: Self, _: &mut Context) {
+        fn teardown(app: Self, _: &mut Context<Recs>) {
             println!("{:?}", app);
         }
     }
