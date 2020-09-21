@@ -261,7 +261,6 @@ where
     }
     pub fn line<C, P>(
         &mut self,
-        mesh_id: R::MeshId,
         color: C,
         endpoints: P,
         thickness: f32,
@@ -274,16 +273,18 @@ where
         let (a, b) = endpoints.to_pair();
         let a: Vec2 = a.map();
         let b: Vec2 = b.map();
-        // let midpoint = a.lerp(b, 0.5);
-        let perp = b
-            .sub(a)
-            .unit()
-            .rotate_about(f32::TAU / 4.0, 0.0.square())
-            .mul(thickness / 2.0);
-        self.polygon(
-            mesh_id,
-            color,
-            &[a.add(perp), b.add(perp), b.sub(perp), a.sub(perp)],
+        let diff = b.sub(a);
+        let length = diff.mag();
+        let midpoint = a.lerp(b, 0.5);
+        let rot = diff.atan();
+        Transformable::new(
+            self,
+            color.map(),
+            DrawType::Regular(4),
+            Trans::identity()
+                .scale([length, thickness].mul(0.5 * std::f32::consts::SQRT_2))
+                .rotate(rot)
+                .translate(midpoint),
         )
     }
 }

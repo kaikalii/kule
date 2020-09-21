@@ -88,23 +88,12 @@ mod test {
             recter.transform(rotate_about(1.0, app.pos)).draw();
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32);
-            draw.round_line(
-                "round line",
-                Col::green(0.8),
-                (rect.bottom_left(), rect.top_right()),
-                RoundLine::new(5.0).resolution(4),
-            );
+            draw.line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
             draw.with_absolute_camera(|draw| {
                 let font_size = 70.0;
-                // let text = "Wow, pretty good!";
-                let text = "giler, Wow";
+                let text = "Wow, pretty good!";
                 let text_width = draw.fonts.width(text, font_size);
-                draw.line(
-                    "text underline",
-                    Col::white(),
-                    [2.0, font_size, text_width, font_size],
-                    1.0,
-                );
+                draw.line(Col::white(), [3.0, font_size, text_width, font_size], 1.0);
                 draw.text(Col::white(), text, font_size).transform(|t| {
                     t.translate([0.0, font_size])
                         .translate(ctx.tracker.mouse_pos())
