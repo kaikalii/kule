@@ -41,7 +41,6 @@ pub trait Kule: Sized + 'static {
             .with_inner_size(dpi::LogicalSize::new(builder.size[0], builder.size[1]));
         let cb = glutin::ContextBuilder::new().with_multisampling(builder.samples);
         let display = Display::new(wb, cb, &event_loop)?;
-        println!("{:?}", display.get_supported_glsl_version());
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);
         let mut ctx = Context {

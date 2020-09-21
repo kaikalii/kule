@@ -96,9 +96,9 @@ mod test {
                 RoundLine::new(5.0).resolution(4),
             );
             draw.with_absolute_camera(|draw| {
-                let font_size = 50.0;
+                let font_size = 70.0;
                 // let text = "Wow, pretty good!";
-                let text = "aaaaaaaa";
+                let text = "giler, Wow";
                 let text_width = draw.fonts.width(text, font_size);
                 draw.line(
                     "text underline",
@@ -106,8 +106,11 @@ mod test {
                     [2.0, font_size, text_width, font_size],
                     1.0,
                 );
-                draw.text(Col::white(), text, font_size)
-                    .transform(translate([0.0, font_size]));
+                draw.text(Col::white(), text, font_size).transform(|t| {
+                    t.translate([0.0, font_size])
+                        .translate(ctx.tracker.mouse_pos())
+                });
+                draw.circle([1.0, 0.0, 1.0, 0.3], (ctx.tracker.mouse_pos(), 5.0), 10);
             });
             draw.circle([1.0, 1.0, 0.0, 0.3], (ctx.mouse_coords(), 5.0), 10);
         }

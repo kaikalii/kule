@@ -299,7 +299,7 @@ pub struct RoundLine {
 
 impl RoundLine {
     /// Create a new `RoundLine` with the given `thickness` and the
-    /// default `resolution` of 20
+    /// default `resolution` of `20`
     pub const fn new(thickness: f32) -> Self {
         RoundLine {
             thickness,
@@ -383,7 +383,7 @@ where
                 resolution: spec.size.resolution,
                 font_id: spec.font_id,
             },
-            Trans::identity().then(scale_trans),
+            scale_trans,
         )
     }
     pub fn text<C, L>(&mut self, color: C, string: &str, spec: L) -> Transformable<'ctx, '_, T, R>
@@ -405,7 +405,7 @@ where
                 },
                 &mut gps,
             );
-            let buffers: Vec<_> = gps
+            let offset_chars: Vec<_> = gps
                 .into_iter()
                 .map(|gp| {
                     let offset = [
@@ -418,15 +418,14 @@ where
             Transformable::multi(
                 self,
                 color,
-                buffers.into_iter().map(|(offset, ch)| {
-                    (
-                        DrawType::Character {
-                            ch,
-                            resolution: spec.size.resolution,
-                            font_id: spec.font_id,
-                        },
-                        scale_trans.translate(offset),
-                    )
+                offset_chars.into_iter().map(|(offset, ch)| DrawItem {
+                    ty: DrawType::Character {
+                        ch,
+                        resolution: spec.size.resolution,
+                        font_id: spec.font_id,
+                    },
+                    transform: Trans::new_translate(offset).then(scale_trans),
+                    color: None,
                 }),
                 Trans::identity(),
             )
@@ -516,13 +515,22 @@ struct Border {
     thickness: f32,
 }
 
+struct DrawItem<R>
+where
+    R: Resources,
+{
+    ty: DrawType<R>,
+    transform: Trans,
+    color: Option<Col>,
+}
+
 pub struct Transformable<'ctx, 'drawer, T, R>
 where
     T: Canvas,
     R: Resources,
 {
     drawer: &'drawer mut Drawer<'ctx, T, R>,
-    tys: Rc<Vec<(DrawType<R>, Trans)>>,
+    items: Rc<Vec<DrawItem<R>>>,
     color: Col,
     drawn: bool,
     transform: Trans,
@@ -541,7 +549,7 @@ where
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
-            tys: Rc::clone(&self.tys),
+            items: Rc::clone(&self.items),
             color: color.map(),
             transform: Trans::identity(),
             border: self.border,
@@ -558,7 +566,7 @@ where
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
-            tys: Rc::clone(&self.tys),
+            items: Rc::clone(&self.items),
             color: self.color,
             transform: transformation(self.transform),
             border: self.border,
@@ -576,7 +584,7 @@ where
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
-            tys: Rc::clone(&self.tys),
+            items: Rc::clone(&self.items),
             color: self.color,
             transform: self.transform,
             border: Some(Border {
@@ -590,7 +598,7 @@ where
         self.drawn = true;
         Transformable {
             drawer: self.drawer,
-            tys: Rc::clone(&self.tys),
+            items: Rc::clone(&self.items),
             color: self.color,
             transform: self.transform,
             border: None,
@@ -599,7 +607,7 @@ where
     }
     pub fn draw(&mut self) {
         let camera_transform = self.drawer.camera.transform();
-        for (ty, trans) in &*self.tys {
+        for item in self.items.iter() {
             let Drawer {
                 meshes,
                 facade,
@@ -610,12 +618,12 @@ where
                 ..
             } = &mut self.drawer;
             let (vertices, indices) = meshes
-                .entry(*ty)
-                .or_insert_with(|| ty.vertices_indices(*facade, fonts));
-            let transform = self.transform.then(*trans).then(camera_transform);
+                .entry(item.ty)
+                .or_insert_with(|| item.ty.vertices_indices(*facade, fonts));
+            let full_transform = item.transform.then(self.transform).then(camera_transform);
             let uniforms = uniform! {
-                transform: extend_transform(transform),
-                color: self.color
+                transform: extend_transform(full_transform),
+                color: item.color.unwrap_or(self.color)
             };
             surface
                 .draw(&*vertices, &*indices, program, &uniforms, draw_params)
@@ -680,20 +688,29 @@ where
         ty: DrawType<R>,
         transform: Trans,
     ) -> Self {
-        Transformable::multi(drawer, color, once((ty, Trans::identity())), transform)
+        Transformable::multi(
+            drawer,
+            color,
+            once(DrawItem {
+                ty,
+                transform: Trans::identity(),
+                color: None,
+            }),
+            transform,
+        )
     }
     fn multi<I>(
         drawer: &'drawer mut Drawer<'ctx, T, R>,
         color: Col,
-        tys: I,
+        items: I,
         transform: Trans,
     ) -> Self
     where
-        I: IntoIterator<Item = (DrawType<R>, Trans)>,
+        I: IntoIterator<Item = DrawItem<R>>,
     {
         Transformable {
             drawer,
-            tys: Rc::new(tys.into_iter().collect()),
+            items: Rc::new(items.into_iter().collect()),
             color,
             transform,
             drawn: false,

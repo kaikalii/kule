@@ -1,5 +1,5 @@
 [dependencies]
-fontdue = '0.2.4'
+fontdue = '0.3.2'
 glium = '0.27.0'
 lyon_tessellation = '0.16.0'
 thiserror = '1.0.20'
