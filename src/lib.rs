@@ -87,8 +87,7 @@ mod test {
             recter.draw();
             recter.transform(rotate_about(1.0, app.pos)).draw();
             drop(recter);
-            draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
-                .border(Col::blue(1.0), 3.0);
+            draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32);
             draw.round_line(
                 "round line",
                 Col::green(0.8),

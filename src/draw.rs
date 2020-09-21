@@ -509,12 +509,6 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Border {
-    color: Col,
-    thickness: f32,
-}
-
 struct DrawItem<R>
 where
     R: Resources,
@@ -534,7 +528,6 @@ where
     color: Col,
     drawn: bool,
     transform: Trans,
-    border: Option<Border>,
 }
 
 impl<'ctx, 'drawer, T, R> Transformable<'ctx, 'drawer, T, R>
@@ -552,7 +545,6 @@ where
             items: Rc::clone(&self.items),
             color: color.map(),
             transform: Trans::identity(),
-            border: self.border,
             drawn: false,
         }
     }
@@ -569,39 +561,6 @@ where
             items: Rc::clone(&self.items),
             color: self.color,
             transform: transformation(self.transform),
-            border: self.border,
-            drawn: false,
-        }
-    }
-    pub fn border<'tfbl, C>(
-        &'tfbl mut self,
-        color: C,
-        thickness: f32,
-    ) -> Transformable<'ctx, 'tfbl, T, R>
-    where
-        C: Color,
-    {
-        self.drawn = true;
-        Transformable {
-            drawer: self.drawer,
-            items: Rc::clone(&self.items),
-            color: self.color,
-            transform: self.transform,
-            border: Some(Border {
-                color: color.map(),
-                thickness,
-            }),
-            drawn: false,
-        }
-    }
-    pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, T, R> {
-        self.drawn = true;
-        Transformable {
-            drawer: self.drawer,
-            items: Rc::clone(&self.items),
-            color: self.color,
-            transform: self.transform,
-            border: None,
             drawn: false,
         }
     }
@@ -628,57 +587,6 @@ where
             surface
                 .draw(&*vertices, &*indices, program, &uniforms, draw_params)
                 .unwrap();
-            // // Draw border
-            // if let Some((vertices, Border { color, thickness })) = border_vertices.zip(self.border)
-            // {
-            //     if let Some(rect) = f32::Rect::bounding(vertices.iter().map(|v| v.pos)) {
-            //         let len = vertices.len() as u16;
-            //         let facade = self.drawer.facade;
-            //         let indices =
-            //             self.drawer
-            //                 .indices
-            //                 .get_or_insert(IndicesType::Border(len), || {
-            //                     IndexBuffer::new(
-            //                         facade,
-            //                         PrimitiveType::TriangleStrip,
-            //                         &(0..(len * 2))
-            //                             .chain(once(0))
-            //                             .chain(once(1))
-            //                             .collect::<Vec<_>>(),
-            //                     )
-            //                     .unwrap()
-            //                 });
-            //         let center = rect.center();
-            //         let radius = thickness / 2.0;
-            //         let vertices = vertices
-            //             .into_iter()
-            //             .flat_map(|v| {
-            //                 let diff = v.pos.sub(center);
-            //                 let length = diff.mag();
-            //                 let unit = diff.unit();
-            //                 once(Vertex {
-            //                     pos: center.add(unit.mul(length + radius)).transform(transform),
-            //                     color,
-            //                 })
-            //                 .chain(once(Vertex {
-            //                     pos: center.add(unit.mul(length - radius)).transform(transform),
-            //                     color,
-            //                 }))
-            //             })
-            //             .collect::<Vec<_>>();
-            //         let vertices = VertexBuffer::new(self.drawer.facade, &vertices).unwrap();
-            //         self.drawer
-            //             .surface
-            //             .draw(
-            //                 &vertices,
-            //                 indices,
-            //                 self.drawer.program,
-            //                 &uniforms,
-            //                 &self.drawer.draw_params,
-            //             )
-            //             .unwrap();
-            //     }
-            // }
         }
         self.drawn = true;
     }
@@ -714,7 +622,6 @@ where
             color,
             transform,
             drawn: false,
-            border: None,
         }
     }
 }
