@@ -39,7 +39,9 @@ pub trait Kule: Sized + 'static {
             .with_title(&builder.title)
             .with_window_icon(builder.icon.take())
             .with_inner_size(dpi::LogicalSize::new(builder.size[0], builder.size[1]));
-        let cb = glutin::ContextBuilder::new().with_multisampling(builder.samples);
+        let cb = glutin::ContextBuilder::new()
+            .with_multisampling(builder.samples)
+            .with_stencil_buffer(1);
         let display = Display::new(wb, cb, &event_loop)?;
         let window_size = display.gl_window().window().inner_size();
         let program = crate::default_shaders(&display);

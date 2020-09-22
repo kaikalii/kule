@@ -165,8 +165,7 @@ where
     where
         C: Color,
     {
-        self.surface
-            .clear_color(color.r(), color.g(), color.b(), color.alpha())
+        self.surface.clear_all(color.map(), 0.0, 0)
     }
     pub fn rectangle<C, E>(&mut self, color: C, rect: E) -> Transformable<'ctx, '_, T, R>
     where
@@ -519,6 +518,12 @@ where
     color: Option<Col>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Border {
+    color: Col,
+    thickness: f32,
+}
+
 pub struct Transformable<'ctx, 'drawer, T, R>
 where
     T: Canvas,
@@ -529,6 +534,7 @@ where
     color: Col,
     drawn: bool,
     transform: Trans,
+    border: Option<Border>,
 }
 
 impl<'ctx, 'drawer, T, R> Transformable<'ctx, 'drawer, T, R>
@@ -547,6 +553,7 @@ where
             color: color.map(),
             transform: Trans::identity(),
             drawn: false,
+            border: self.border,
         }
     }
     pub fn transform<'tfbl, D>(
@@ -563,6 +570,39 @@ where
             color: self.color,
             transform: transformation(self.transform),
             drawn: false,
+            border: self.border,
+        }
+    }
+    pub fn border<'tfbl, C>(
+        &'tfbl mut self,
+        color: C,
+        thickness: f32,
+    ) -> Transformable<'ctx, 'tfbl, T, R>
+    where
+        C: Color,
+    {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            items: Rc::clone(&self.items),
+            color: self.color,
+            transform: self.transform,
+            drawn: false,
+            border: Some(Border {
+                color: color.map(),
+                thickness,
+            }),
+        }
+    }
+    pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, T, R> {
+        self.drawn = true;
+        Transformable {
+            drawer: self.drawer,
+            items: Rc::clone(&self.items),
+            color: self.color,
+            transform: self.transform,
+            drawn: false,
+            border: None,
         }
     }
     pub fn draw(&mut self) {
@@ -580,7 +620,8 @@ where
             let (vertices, indices) = meshes
                 .entry(item.ty)
                 .or_insert_with(|| item.ty.vertices_indices(*facade, fonts));
-            let full_transform = item.transform.then(self.transform).then(camera_transform);
+            let world_transform = item.transform.then(self.transform);
+            let full_transform = world_transform.then(camera_transform);
             let uniforms = uniform! {
                 transform: extend_transform(full_transform),
                 color: item.color.unwrap_or(self.color)
@@ -588,6 +629,69 @@ where
             surface
                 .draw(&*vertices, &*indices, program, &uniforms, draw_params)
                 .unwrap();
+            // Draw border
+            if let Some(border) = self.border {
+                let bounding_rect = Rect::bounding(
+                    vertices
+                        .map_read()
+                        .iter()
+                        .map(|v| v.pos.transform(world_transform)),
+                );
+                if let Some(bounding_rect) = bounding_rect {
+                    let center = bounding_rect.center();
+                    let size = bounding_rect.size();
+                    let scale = size.add([border.thickness * 0.5; 2]).div2(size);
+                    // Draw stencil
+                    let border_inner_transform = world_transform
+                        .translate(center.neg())
+                        .scale([1.0; 2].div2(scale))
+                        .translate(center)
+                        .then(camera_transform);
+                    let uniforms = uniform! {
+                        transform: extend_transform(border_inner_transform),
+                        color: [0f32; 4]
+                    };
+                    let draw_params = DrawParameters {
+                        stencil: draw_parameters::Stencil {
+                            reference_value_clockwise: 1,
+                            reference_value_counter_clockwise: 1,
+                            write_mask_clockwise: 0xffffffff,
+                            write_mask_counter_clockwise: 0xffffffff,
+                            depth_pass_operation_clockwise: StencilOperation::Replace,
+                            depth_pass_operation_counter_clockwise: StencilOperation::Replace,
+                            ..Default::default()
+                        },
+                        ..draw_params.clone()
+                    };
+                    surface
+                        .draw(&*vertices, &*indices, program, &uniforms, &draw_params)
+                        .unwrap();
+                    // Draw border
+                    let border_outer_transform = world_transform
+                        .translate(center.neg())
+                        .scale(scale)
+                        .translate(center)
+                        .then(camera_transform);
+                    let uniforms = uniform! {
+                        transform: extend_transform(border_outer_transform),
+                        color: border.color
+                    };
+                    let draw_params = DrawParameters {
+                        stencil: draw_parameters::Stencil {
+                            reference_value_clockwise: 1,
+                            reference_value_counter_clockwise: 1,
+                            test_clockwise: StencilTest::IfNotEqual { mask: 0xffffffff },
+                            test_counter_clockwise: StencilTest::IfNotEqual { mask: 0xffffffff },
+                            ..Default::default()
+                        },
+                        ..draw_params.clone()
+                    };
+                    surface
+                        .draw(&*vertices, &*indices, program, &uniforms, &draw_params)
+                        .unwrap();
+                    surface.clear_stencil(0);
+                }
+            }
         }
         self.drawn = true;
     }
@@ -623,6 +727,7 @@ where
             color,
             transform,
             drawn: false,
+            border: None,
         }
     }
 }
