@@ -53,11 +53,11 @@ impl Camera {
             ..self
         }
     }
-    pub fn zoom_on(self, zoom: f32, on: Vec2) -> Self {
-        let old_pos = self.pos_to_coords(on);
+    pub fn zoom_on_coords(self, zoom: f32, coords: Vec2) -> Self {
+        let old_pos = self.coords_to_pos(coords);
         let new_cam = self.zoom(zoom);
-        let new_pos = new_cam.pos_to_coords(on);
-        new_cam.translate(new_pos.sub(old_pos).neg())
+        let new_pos = new_cam.coords_to_pos(coords);
+        new_cam.translate(new_pos.sub(old_pos).div(self.zoom))
     }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))

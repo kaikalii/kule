@@ -73,12 +73,17 @@ mod test {
             ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
         }
         fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) {
-            if let Event::MouseButton {
-                button: MouseButton::Left,
-                state: ButtonState::Pressed,
-            } = event
-            {
-                app.pos = ctx.mouse_coords();
+            match event {
+                Event::MouseButton {
+                    button: MouseButton::Left,
+                    state: ButtonState::Pressed,
+                } => app.pos = ctx.mouse_coords(),
+                Event::Scroll([_, y]) => {
+                    ctx.camera = ctx
+                        .camera
+                        .zoom_on_coords(1.1f32.powf(y), ctx.mouse_coords())
+                }
+                _ => {}
             }
         }
         fn draw<C>(draw: &mut Drawer<C, Recs>, app: &Self, ctx: &Context<Recs>)
