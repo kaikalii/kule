@@ -100,7 +100,7 @@ mod test {
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border([0.0, 0.0, 1.0], 3.0);
-            draw.line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
+            draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
             draw.with_absolute_camera(|draw| {
                 let font_size = 70.0;
                 let text = "Wow, pretty good!";

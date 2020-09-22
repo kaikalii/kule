@@ -220,9 +220,30 @@ where
                 .translate(ellip.center()),
         )
     }
-    pub fn polygon<'p, C, V, P>(
+    pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'ctx, '_, T, R>
+    where
+        C: Color,
+        V: Vector2<Scalar = f32> + 'p,
+        P: IntoIterator<Item = &'p V>,
+    {
+        self.optionally_cached_polygon(None, color, vertices)
+    }
+    pub fn cached_polygon<'p, C, V, P>(
         &mut self,
         mesh_id: R::MeshId,
+        color: C,
+        vertices: P,
+    ) -> Transformable<'ctx, '_, T, R>
+    where
+        C: Color,
+        V: Vector2<Scalar = f32> + 'p,
+        P: IntoIterator<Item = &'p V>,
+    {
+        self.optionally_cached_polygon(Some(mesh_id), color, vertices)
+    }
+    fn optionally_cached_polygon<'p, C, V, P>(
+        &mut self,
+        mesh_id: Option<R::MeshId>,
         color: C,
         vertices: P,
     ) -> Transformable<'ctx, '_, T, R>
@@ -325,7 +346,36 @@ where
 {
     pub fn round_line<C, P, L>(
         &mut self,
+        color: C,
+        endpoints: P,
+        rl: L,
+    ) -> Transformable<'ctx, '_, T, R>
+    where
+        C: Color,
+        P: Pair,
+        P::Item: Vector2<Scalar = f32>,
+        L: Into<RoundLine>,
+    {
+        self.optionally_cached_round_line(None, color, endpoints, rl)
+    }
+    pub fn cached_round_line<C, P, L>(
+        &mut self,
         mesh_id: R::MeshId,
+        color: C,
+        endpoints: P,
+        rl: L,
+    ) -> Transformable<'ctx, '_, T, R>
+    where
+        C: Color,
+        P: Pair,
+        P::Item: Vector2<Scalar = f32>,
+        L: Into<RoundLine>,
+    {
+        self.optionally_cached_round_line(Some(mesh_id), color, endpoints, rl)
+    }
+    fn optionally_cached_round_line<C, P, L>(
+        &mut self,
+        mesh_id: Option<R::MeshId>,
         color: C,
         endpoints: P,
         rl: L,
@@ -360,7 +410,7 @@ where
                 b_start.rotate_about(angle, b_center)
             }))
             .collect();
-        self.polygon(mesh_id, color, &vertices)
+        self.optionally_cached_polygon(mesh_id, color, &vertices)
     }
     pub fn character<'drawer, C, L>(
         &'drawer mut self,
@@ -442,7 +492,7 @@ where
 {
     Empty,
     Regular(u16),
-    Irregular(R::MeshId),
+    Irregular(Option<R::MeshId>),
     Character {
         ch: char,
         resolution: u32,
