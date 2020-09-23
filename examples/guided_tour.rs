@@ -1,14 +1,26 @@
 use kule::*;
 
-// An example app
+// Here is a simple app
 struct App {
     pos: Vec2,
     rotation: f32,
 }
 
+// We'll use this id type to identify sounds
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum SoundId {
+    Kick,
+    Noise,
+}
+
 // The `Kule` trait defines app behavior
 impl Kule for App {
-    type Resources = ();
+    // The `Resources` associed type defines id types used to reference cached resources
+    // The order is <FontId, MeshId, SoundId>
+    // We are only using one font, so we'll use `()` for our font id
+    // We are not caching any meshes, so we'll use `()` for our mesh id
+    // We use the `SoundId` enum we made above for our sound id
+    type Resources = GenericResources<(), (), SoundId>;
     // The `build` method lets use define our app context
     fn build() -> KuleResult<ContextBuilder> {
         Ok(ContextBuilder::new()
@@ -46,14 +58,31 @@ impl Kule for App {
     }
     // The `event` method lets us handle events
     fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {
-        // Check for a left-click
-        if let Event::MouseButton {
-            button: MouseButton::Left,
-            state: ButtonState::Pressed,
-        } = event
-        {
-            // `Context::mouse_coords` gets the coordinates of the mouse in world space
-            app.pos = ctx.mouse_coords();
+        match event {
+            // Check for a left-click
+            Event::MouseButton {
+                button: MouseButton::Left,
+                state: ButtonState::Pressed,
+            } => {
+                // `Context::mouse_coords` gets the coordinates of the mouse in world space
+                app.pos = ctx.mouse_coords();
+            }
+            // Check for key presses
+            Event::Key {
+                key,
+                state: ButtonState::Pressed,
+                ..
+            } => {
+                // Play sounds when certain keys are pressed
+                match key {
+                    Key::Space => ctx.play_sound(SoundId::Kick, app).unwrap(),
+                    Key::LShift => ctx
+                        .play_modified_sound(SoundId::Noise, app, |s| s.amplify(2.0))
+                        .unwrap(),
+                    _ => {}
+                }
+            }
+            _ => {}
         }
     }
     // The `draw` method lets us draw to a generic canvas
@@ -100,6 +129,18 @@ impl Kule for App {
     // The `teardown` method lets us call some code when the window is closed
     fn teardown(app: Self, _ctx: &mut Context<Self::Resources>) {
         println!("Quit at {:?}.", app.pos);
+    }
+    // The `load_sound` method lets us define how to load sound data based on our sound id type
+    // The sound id type for our `()` `Resources` is `()` which means we can only load one sound.
+    fn load_sound(
+        sound_id: <Self::Resources as Resources>::SoundId,
+        _app: &Self,
+    ) -> KuleResult<Option<SoundBuffer>> {
+        let bytes = match sound_id {
+            SoundId::Kick => include_bytes!("kick.ogg").as_ref(),
+            SoundId::Noise => include_bytes!("noise.ogg").as_ref(),
+        };
+        SoundBuffer::decode(bytes).map(Some).map_err(Into::into)
     }
 }
 

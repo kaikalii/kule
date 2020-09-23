@@ -3,7 +3,7 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData, time::Instant};
 use glium::{glutin::*, *};
 
 #[cfg(feature = "sound")]
-use crate::sound;
+use crate::sound::{self, SoundBuffer};
 use crate::{
     Camera, Canvas, Context, ContextBuilder, Drawer, Event, FloatingScalar, KuleResult,
     StateTracker, Window,
@@ -41,7 +41,7 @@ pub trait Kule: Sized + 'static {
     fn load_sound(
         sound_id: <Self::Resources as Resources>::SoundId,
         app: &Self,
-    ) -> KuleResult<Option<crate::sound::SoundBuffer>> {
+    ) -> KuleResult<Option<SoundBuffer>> {
         Ok(None)
     }
     /// Run the app
