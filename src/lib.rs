@@ -82,7 +82,7 @@ mod test {
             draw.clear(Col::black());
             let rect = Rect::centered(app.pos, [40.0; 2]);
             let mut recter = draw.rectangle(Col::red(1.0), rect);
-            let mut bordered = recter.border(Col::red(0.4), 5.0);
+            let mut bordered = recter.border(Col::red(0.4), 3.0);
             bordered.draw();
             bordered
                 .transform(|t| t.rotate_about(app.rot, app.pos))
@@ -91,7 +91,7 @@ mod test {
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
                 .border([0.0, 0.0, 1.0], 3.0);
-            draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 5.0);
+            draw.round_line(Col::green(0.8), (rect.bottom_left(), rect.top_right()), 3.0);
             draw.with_absolute_camera(|draw| {
                 let font_size = 70.0;
                 let text = "Wow, pretty good!";

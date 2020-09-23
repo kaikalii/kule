@@ -850,7 +850,7 @@ where
                 if let Some(bounding_rect) = bounding_rect {
                     let center = bounding_rect.center();
                     let size = bounding_rect.size();
-                    let scale = size.add([border.thickness * 0.5; 2]).div2(size);
+                    let scale = size.add([border.thickness; 2]).div2(size);
                     // Draw stencil
                     let border_inner_transform = world_transform
                         .translate(center.neg())
