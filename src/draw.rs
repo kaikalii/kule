@@ -35,9 +35,9 @@ impl Camera {
     pub fn with_zoom(self, zoom: f32) -> Self {
         Camera { zoom, ..self }
     }
-    pub fn zoom(self, zoom: f32) -> Self {
+    pub fn zoom_by(self, by: f32) -> Self {
         Camera {
-            zoom: self.zoom * zoom,
+            zoom: self.zoom * by,
             ..self
         }
     }
@@ -53,16 +53,9 @@ impl Camera {
             ..self
         }
     }
-    pub fn zoom_on_coords(self, zoom: f32, coords: Vec2) -> Self {
-        let old_pos = self.coords_to_pos(coords);
-        let new_cam = self.zoom(zoom);
-        let new_pos = new_cam.coords_to_pos(coords);
-        new_cam.translate(new_pos.sub(old_pos).div(self.zoom))
-    }
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
             .div(self.zoom)
-            // .mul(2.0)
             .add(self.center)
     }
     pub fn coords_to_pos(self, coords: Vec2) -> Vec2 {
@@ -76,8 +69,7 @@ impl Camera {
         Rect::centered(self.center, self.window_size.div(self.zoom))
     }
     fn transform(&self) -> Trans {
-        Trans::identity()
-            .translate(self.center.neg())
+        Trans::new_translate(self.center.neg())
             .scale([self.zoom; 2].mul2([1.0, -1.0]))
             .scale::<Vec2>(self.window_size.map_with(|d| 1.0 / d))
             .zoom(2.0)

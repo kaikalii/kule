@@ -70,7 +70,7 @@ mod test {
             app.pos.add_assign(wasd.mul(100.0 * dt));
             app.rot += qe * dt;
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
-            ctx.camera = ctx.camera.zoom(1.1f32.powf(plus_minus * dt * 10.0));
+            ctx.camera = ctx.camera.zoom_by(1.1f32.powf(plus_minus * dt * 10.0));
         }
         fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) {
             match event {
@@ -79,9 +79,10 @@ mod test {
                     state: ButtonState::Pressed,
                 } => app.pos = ctx.mouse_coords(),
                 Event::Scroll([_, y]) => {
-                    ctx.camera = ctx
-                        .camera
-                        .zoom_on_coords(1.1f32.powf(y), ctx.mouse_coords())
+                    let old_coords = ctx.mouse_coords();
+                    ctx.camera = ctx.camera.zoom_by(1.1f32.powf(y));
+                    let new_coords = ctx.mouse_coords();
+                    ctx.camera.center.sub_assign(new_coords.sub(old_coords));
                 }
                 _ => {}
             }
