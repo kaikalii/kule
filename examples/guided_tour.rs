@@ -66,30 +66,26 @@ impl Kule for App {
         // Drawing shapes is easy
         draw.line(Col::gray(0.5), [app.pos, [0.0; 2]], 5.0);
         draw.circle(Col::blue(1.0), ([0.0; 2], 25.0), 16)
-            .border([0.3, 0.3, 1.0], 5.0);
+            .border([0.15, 0.15, 1.0], 5.0);
         // Here we draw a square representing a player
         draw.rectangle(Col::red(1.0), Rect::square_centered(app.pos, 50.0))
             .transform(|t| t.rotate_about(app.rotation, app.pos));
         // `Drawer::with_absolute_camera` lets us draw things like UI
         draw.with_absolute_camera(|draw| {
-            const TEXT_SIZE: f32 = 50.0;
+            const PX: f32 = 50.0;
             // Text is easy to draw
             // We can create the draw instruction first
-            let mut text = draw.text(Col::white(), "Graphics!", TEXT_SIZE);
+            let mut text = draw.text(Col::white(), "Graphics!", PX);
             // Then modify it and draw it multiple times
-            text.translate([0.0, TEXT_SIZE]);
-            text.translate([0.0, TEXT_SIZE * 2.0])
-                .color([1.0, 0.0, 0.0]);
-            text.translate([0.0, TEXT_SIZE * 3.0])
-                .color([1.0, 1.0, 0.0]);
-            text.translate([0.0, TEXT_SIZE * 4.0])
-                .color([0.0, 1.0, 0.0]);
-            text.translate([0.0, TEXT_SIZE * 5.0])
-                .color([0.0, 0.0, 1.0]);
+            text.translate([0.0, PX]); // Translate the text down and draw it
+            text.translate([0.0, PX * 2.0]).color(Col::red(1.0)); // Translate the text down, color it, and draw it
+            text.translate([0.0, PX * 3.0]).color(Col::yellow(1.0)); // etc...
+            text.translate([0.0, PX * 4.0]).color(Col::green(1.0));
+            text.translate([0.0, PX * 5.0]).color(Col::blue(1.0));
             drop(text);
 
             // We can draw text with different resolutions
-            // Resolutions below 60 should probably be avoided but this depends on the font
+            // Resolutions below 60 should probably be avoided, but this depends on the font
             let glyph_size = GlyphSize::new(80.0).resolution(60);
             // Lets use this different text resolution to draw an fps counter
             let fps_offset = [0.0, draw.camera.window_size().y() - 20.0];

@@ -43,6 +43,18 @@ pub trait Color: Copy {
     fn blue(b: f32) -> Self {
         Self::black().with_b(b)
     }
+    /// Create an opaque yellow color
+    fn yellow(y: f32) -> Self {
+        Self::gray(y).with_b(0.0)
+    }
+    /// Create an opaque magenta color
+    fn magenta(m: f32) -> Self {
+        Self::gray(m).with_g(0.0)
+    }
+    /// Create an opaque cyan color
+    fn cyan(c: f32) -> Self {
+        Self::gray(c).with_r(0.0)
+    }
     /// Get the color with a different red component
     fn with_r(self, r: f32) -> Self {
         Self::rgba(r, self.g(), self.b(), self.alpha())
