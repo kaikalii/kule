@@ -1,4 +1,10 @@
-use std::{collections::HashMap, iter::once, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    fmt,
+    iter::once,
+    rc::Rc,
+};
 
 use glium::{backend::*, *};
 use vector2math::*;
@@ -76,6 +82,64 @@ impl Camera {
     }
 }
 
+type Vertices = VertexBuffer<Vertex>;
+type Indices = IndexBuffer<u16>;
+type MeshMap<R> = HashMap<DrawType<R>, (Vertices, Indices)>;
+
+pub struct MeshCache<R>(Rc<RefCell<MeshMap<R>>>)
+where
+    R: Resources;
+
+impl<R> Default for MeshCache<R>
+where
+    R: Resources,
+{
+    fn default() -> Self {
+        MeshCache(Default::default())
+    }
+}
+
+impl<R> MeshCache<R>
+where
+    R: Resources,
+{
+    pub(crate) fn insert(
+        &self,
+        draw_type: DrawType<R>,
+        vertices: VertexBuffer<Vertex>,
+        indices: IndexBuffer<u16>,
+    ) {
+        self.0.borrow_mut().insert(draw_type, (vertices, indices));
+    }
+    pub(crate) fn contains(&self, draw_type: &DrawType<R>) -> bool {
+        self.0.borrow().contains_key(draw_type)
+    }
+    pub(crate) fn get(&self, draw_type: &DrawType<R>) -> Option<(Ref<Vertices>, Ref<Indices>)> {
+        let map = self.0.borrow();
+        if map.contains_key(draw_type) {
+            Some(Ref::map_split(self.0.borrow(), |map| {
+                let (vertices, indices) = &map[draw_type];
+                (vertices, indices)
+            }))
+        } else {
+            None
+        }
+    }
+    pub fn contains_mesh(&self, mesh_id: R::MeshId) -> bool {
+        self.contains(&DrawType::Irregular(Some(mesh_id)))
+    }
+    pub fn clear_meshes(&self) {
+        self.0
+            .borrow_mut()
+            .retain(|draw_type, _| !matches!(draw_type, DrawType::Irregular(_)));
+    }
+    pub fn remove_mesh(&self, mesh_id: R::MeshId) {
+        self.0
+            .borrow_mut()
+            .remove(&DrawType::Irregular(Some(mesh_id)));
+    }
+}
+
 pub trait Canvas {
     type Facade: Facade;
     type Surface: Surface;
@@ -97,8 +161,8 @@ where
     facade: &'ctx T::Facade,
     program: &'ctx Program,
     pub fonts: &'ctx Fonts<R::FontId>,
+    meshes: &'ctx MeshCache<R>,
     pub camera: Camera,
-    meshes: HashMap<DrawType<R>, (VertexBuffer<Vertex>, IndexBuffer<u16>)>,
     pub draw_params: DrawParameters<'ctx>,
 }
 
@@ -112,6 +176,7 @@ where
         facade: &'ctx T::Facade,
         program: &'ctx Program,
         fonts: &'ctx Fonts<R::FontId>,
+        meshes: &'ctx MeshCache<R>,
         camera: Camera,
     ) -> Self {
         Drawer {
@@ -120,7 +185,7 @@ where
             program,
             fonts,
             camera,
-            meshes: HashMap::new(),
+            meshes,
             draw_params: DrawParameters {
                 blend: Blend::alpha_blending(),
                 ..Default::default()
@@ -263,7 +328,7 @@ where
         )
         .unwrap();
         self.meshes
-            .insert(DrawType::Irregular(mesh_id), (vertices, indices));
+            .insert(DrawType::Irregular(mesh_id), vertices, indices);
         Transformable::new(
             self,
             color.map(),
@@ -478,7 +543,7 @@ where
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum DrawType<R>
+pub(crate) enum DrawType<R>
 where
     R: Resources,
 {
@@ -547,6 +612,25 @@ where
                         .unwrap();
                 (vertices, indices)
             }
+        }
+    }
+}
+
+impl<R> fmt::Debug for DrawType<R>
+where
+    R: Resources,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DrawType::Empty => write!(f, "Empty"),
+            DrawType::Regular(n) => write!(f, "{} sides", n),
+            DrawType::Irregular(None) => write!(f, "Uncached"),
+            DrawType::Irregular(Some(mesh_id)) => write!(f, "Cached ({:?})", mesh_id),
+            DrawType::Character {
+                ch,
+                resolution,
+                font_id,
+            } => write!(f, "'{}' at {}px with {:?}", ch, resolution, font_id),
         }
     }
 }
@@ -659,9 +743,11 @@ where
                 draw_params,
                 ..
             } = &mut self.drawer;
-            let (vertices, indices) = meshes
-                .entry(item.ty)
-                .or_insert_with(|| item.ty.vertices_indices(*facade, fonts));
+            if !meshes.contains(&item.ty) {
+                let (vertices, indices) = item.ty.vertices_indices(*facade, fonts);
+                meshes.insert(item.ty, vertices, indices);
+            }
+            let (vertices, indices) = meshes.get(&item.ty).unwrap();
             let world_transform = item.transform.then(self.transform);
             let full_transform = world_transform.then(camera_transform);
             let uniforms = uniform! {
@@ -675,7 +761,8 @@ where
             if let Some(border) = self.border {
                 let bounding_rect = Rect::bounding(
                     vertices
-                        .map_read()
+                        .read()
+                        .unwrap()
                         .iter()
                         .map(|v| v.pos.transform(world_transform)),
                 );

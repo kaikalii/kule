@@ -48,6 +48,7 @@ pub trait Kule: Sized + 'static {
         let mut ctx = Context {
             program,
             fonts: Default::default(),
+            meshes: Default::default(),
             tracker: StateTracker::new(),
             camera: Camera {
                 center: [0.0; 2],

@@ -7,7 +7,8 @@ pub use monitor::MonitorHandle;
 pub use window::{Fullscreen, WindowId};
 
 use crate::{
-    Camera, Drawer, Fonts, GlyphCache, KuleResult, Resources, StateTracker, Vec2, WindowCanvas,
+    Camera, Drawer, Fonts, GlyphCache, KuleResult, MeshCache, Resources, StateTracker, Vec2,
+    WindowCanvas,
 };
 
 pub struct Window(pub(crate) Display);
@@ -57,6 +58,7 @@ where
     pub camera: Camera,
     pub window: Window,
     pub fonts: Fonts<R::FontId>,
+    pub meshes: MeshCache<R>,
     pub should_close: bool,
     pub(crate) update_timer: Instant,
     pub(crate) fps_timer: Instant,
@@ -79,6 +81,7 @@ where
             &self.window.0,
             &self.program,
             &self.fonts,
+            &self.meshes,
             self.camera,
         );
         f(&mut drawer);
