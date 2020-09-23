@@ -117,13 +117,16 @@ pub trait Kule: Sized + 'static {
 pub trait Resources: Copy + Eq + Hash {
     /// The id used to identify fonts
     type FontId: ResourceId;
-    /// The id used to identity irregular cached meshes
+    /// The id used to identify irregular cached meshes
     type MeshId: ResourceId;
+    /// The id used to identify sounds
+    type SoundId: ResourceId;
 }
 
 impl Resources for () {
     type FontId = ();
     type MeshId = ();
+    type SoundId = ();
 }
 
 /// An id for app resources
@@ -152,13 +155,19 @@ type MrRecs = GenericResources<FontId, MeshId>;
 ```
 */
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GenericResources<FontId, MeshId>(PhantomData<FontId>, PhantomData<MeshId>);
+pub struct GenericResources<FontId, MeshId, SoundId>(
+    PhantomData<FontId>,
+    PhantomData<MeshId>,
+    PhantomData<SoundId>,
+);
 
-impl<F, M> Resources for GenericResources<F, M>
+impl<F, M, S> Resources for GenericResources<F, M, S>
 where
     F: ResourceId,
     M: ResourceId,
+    S: ResourceId,
 {
     type FontId = F;
     type MeshId = M;
+    type SoundId = S;
 }

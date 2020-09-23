@@ -5,9 +5,17 @@ lyon_tessellation = '0.16.0'
 thiserror = '1.0.20'
 vector2math = '0.10.4'
 
+[dependencies.rodio]
+optional = true
+version = '0.11.0'
+
+[features]
+default = ['sound']
+sound = ['rodio']
+
 [package]
 authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']
+description = 'A textureless 2d game engine'
 edition = '2018'
 name = 'kule'
 version = '0.1.0'
-description = 'A textureless 2d game engine'

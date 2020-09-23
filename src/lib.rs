@@ -23,6 +23,10 @@ mod color;
 pub use color::*;
 mod font;
 pub use font::*;
+#[cfg(feature = "sound")]
+mod sound;
+#[cfg(feature = "sound")]
+pub use sound::*;
 
 pub use vector2math::{
     f32::*, Circle, FloatingScalar, FloatingVector2, Pair, Rectangle, Scalar, Transform, Vector2,
@@ -36,7 +40,7 @@ mod test {
         pos: Vec2,
         rot: f32,
     }
-    type Recs = GenericResources<(), &'static str>;
+    type Recs = ();
     impl Kule for App {
         type Resources = Recs;
         fn setup(ctx: &mut Context<Recs>) -> KuleResult<Self> {
