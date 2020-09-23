@@ -200,7 +200,7 @@ impl GlyphCache {
             },
             &mut gps,
         );
-        gps.into_iter().map(|gp| gp.width as f32).sum::<f32>() * size.ratio()
+        gps.last().map(|gp| gp.x + gp.width as f32).unwrap_or(0.0) * size.ratio()
     }
     fn vectorize(&self, ch: char, resolution: u32) -> (Metrics, GlyphGeometry) {
         let (metrics, bytes) = self.font.rasterize(ch, resolution as f32);
