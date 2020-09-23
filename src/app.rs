@@ -15,11 +15,11 @@ pub trait Kule: Sized + 'static {
     /// The resources type
     type Resources: Resources;
     /// Build the context
-    fn build() -> ContextBuilder {
-        ContextBuilder::default()
+    fn build() -> KuleResult<ContextBuilder> {
+        Ok(ContextBuilder::default())
     }
     /// Build the app
-    fn setup(ctx: &mut Context<Self::Resources>) -> Self;
+    fn setup(ctx: &mut Context<Self::Resources>) -> KuleResult<Self>;
     /// Update function called often
     ///
     /// `dt` is the amount of time that has passed since the last update
@@ -36,7 +36,7 @@ pub trait Kule: Sized + 'static {
     fn teardown(app: Self, ctx: &mut Context<Self::Resources>) {}
     /// Run the app
     fn run() -> KuleResult<()> {
-        let mut builder = Self::build();
+        let mut builder = Self::build()?;
         // Build event loop and display
         #[cfg(not(test))]
         let event_loop = event_loop::EventLoop::new();
@@ -73,7 +73,7 @@ pub trait Kule: Sized + 'static {
             update_timer: Instant::now(),
             fps_timer: Instant::now(),
         };
-        let app = Self::setup(&mut ctx);
+        let app = Self::setup(&mut ctx)?;
         let mut app = Some(app);
         // Run the event loop
         event_loop.run(move |event, _, cf| {

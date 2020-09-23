@@ -1,15 +1,30 @@
+use std::error::Error;
+
 /// A kule error type
 #[derive(Debug, thiserror::Error)]
 pub enum KuleError {
-    /// Error creating the display
+    /// App error
     #[error("{0}")]
-    DisplayCreation(#[from] glium::backend::glutin::DisplayCreationError),
+    App(Box<dyn Error>),
     /// Generic static error
     #[error("{0}")]
     Static(&'static str),
+    /// Error creating the display
+    #[error("{0}")]
+    DisplayCreation(#[from] glium::backend::glutin::DisplayCreationError),
     /// Bad window icon data
     #[error("{0}")]
     BadIcon(#[from] glium::glutin::window::BadIcon),
+}
+
+impl KuleError {
+    /// Create a new app error
+    pub fn app<E>(error: E) -> Self
+    where
+        E: Error + 'static,
+    {
+        KuleError::App(Box::new(error))
+    }
 }
 
 /// A kule result type

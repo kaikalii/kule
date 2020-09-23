@@ -39,14 +39,14 @@ mod test {
     type Recs = GenericResources<(), &'static str>;
     impl Kule for App {
         type Resources = Recs;
-        fn setup(ctx: &mut Context<Recs>) -> Self {
+        fn setup(ctx: &mut Context<Recs>) -> KuleResult<Self> {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
-            App {
+            Ok(App {
                 pos: [0.0; 2],
                 rot: 1.0,
-            }
+            })
         }
         fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) {
             let wasd = ctx.tracker.key_diff_vector(Key::A, Key::D, Key::W, Key::S);
