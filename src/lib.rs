@@ -53,7 +53,7 @@ mod sound;
 pub use sound::*;
 
 pub use vector2math::{
-    f32::*, Circle, FloatingScalar, FloatingVector2, Pair, Rectangle, Scalar, Transform, Vector2,
+    f32::*, Circle, FloatingScalar, FloatingVector2, Rectangle, Scalar, Transform, Vector2,
 };
 
 #[cfg(test)]
