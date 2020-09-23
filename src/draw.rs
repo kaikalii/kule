@@ -746,7 +746,7 @@ where
             drawer: self.drawer,
             items: Rc::clone(&self.items),
             color: color.map(),
-            transform: Trans::identity(),
+            transform: self.transform,
             drawn: false,
             border: self.border,
         }
@@ -768,6 +768,10 @@ where
             drawn: false,
             border: self.border,
         }
+    }
+    /// Apply a translation
+    pub fn translate<'tfbl>(&'tfbl mut self, offset: Vec2) -> Transformable<'ctx, 'tfbl, T, R> {
+        self.transform(|t| t.translate(offset))
     }
     /// Set a border
     pub fn border<'tfbl, C>(
