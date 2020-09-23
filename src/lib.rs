@@ -6,6 +6,30 @@ A textureless 2d game engine
 
 Kule is a game engine with a focus on rendering vector graphics. It has no support for textures or sprites.
 This makes making games easier for the unartistic programmer, but restricts art style.
+
+# Usage
+
+Check out [the guided tour](https://github.com/kaikalii/kule/blob/master/examples/guided_tour.rs) for a simple introduction.
+
+## The `Kule` trait
+
+The [`Kule`](trait.Kule.html) trait is the main trait that defines app behavior. Once you have a type that
+implements it, simply call [`Kule::run`](trait.Kule.htm#method.run) in your `main` function.
+
+### The `Context` struct
+
+The [`Context`](struct.Context.html) struct holds the state of the engine. This includes resource caches, the window
+handle, an input tracker, and many other things. Take a look at its documentation for more info.
+
+## Resources
+
+The [`Resources`](trait.Resources.html) trait defines type used for resource caching. Cached resources include
+glyph geometry, 2D meshes, and sound buffers. The id types defined by `Resources` let you refer to cached items.
+[`GenericResources`](struct.GenericResources.html) makes it easy to construct your own resource type.
+
+## The `Drawer` struct
+
+The [`Drawer`](struct.Drawer.html) struct is used to render 2D geometry.
 */
 
 mod app;
@@ -40,7 +64,7 @@ mod test {
         pos: Vec2,
         rot: f32,
     }
-    type Recs = ();
+    type Recs = GenericResources<(), (), &'static str>;
     impl Kule for App {
         type Resources = Recs;
         fn setup(ctx: &mut Context<Recs>) -> KuleResult<Self> {
@@ -76,6 +100,13 @@ mod test {
                     let new_coords = ctx.mouse_coords();
                     ctx.camera.center.sub_assign(new_coords.sub(old_coords));
                 }
+                Event::Key {
+                    key: Key::Space,
+                    state: ButtonState::Pressed,
+                    ..
+                } => {
+                    ctx.play_sound("examples/kick.ogg", app).unwrap();
+                }
                 _ => {}
             }
         }
@@ -109,6 +140,12 @@ mod test {
         }
         fn teardown(app: Self, _: &mut Context<Recs>) {
             println!("{:?}", app);
+        }
+        fn load_sound(
+            sound_id: &'static str,
+            _app: &Self,
+        ) -> KuleResult<Option<crate::sound::SoundBuffer>> {
+            Ok(Some(SoundBuffer::decode(std::fs::read(sound_id)?)?))
         }
     }
 

@@ -2,6 +2,8 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData, time::Instant};
 
 use glium::{glutin::*, *};
 
+#[cfg(feature = "sound")]
+use crate::sound;
 use crate::{
     Camera, Canvas, Context, ContextBuilder, Drawer, Event, FloatingScalar, KuleResult,
     StateTracker, Window,
@@ -34,9 +36,20 @@ pub trait Kule: Sized + 'static {
     fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {}
     /// Called when the app is closed
     fn teardown(app: Self, ctx: &mut Context<Self::Resources>) {}
+    #[cfg(feature = "sound")]
+    /// Load a sound
+    fn load_sound(
+        sound_id: <Self::Resources as Resources>::SoundId,
+        app: &Self,
+    ) -> KuleResult<Option<crate::sound::SoundBuffer>> {
+        Ok(None)
+    }
     /// Run the app
     fn run() -> KuleResult<()> {
         let mut builder = Self::build()?;
+        // Init audio
+        #[cfg(feature = "sound")]
+        let sink = sound::sink();
         // Build event loop and display
         #[cfg(not(test))]
         let event_loop = event_loop::EventLoop::new();
@@ -62,6 +75,10 @@ pub trait Kule: Sized + 'static {
             program,
             fonts: Default::default(),
             meshes: Default::default(),
+            #[cfg(feature = "sound")]
+            mixer: sound::Mixer::new(&sink),
+            #[cfg(feature = "sound")]
+            sounds: sound::Sounds::default(),
             tracker: StateTracker::default(),
             camera: Camera {
                 center: [0.0; 2],
@@ -151,7 +168,7 @@ enum FontId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct MeshId(u32);
 
-type MrRecs = GenericResources<FontId, MeshId>;
+type MyRecs = GenericResources<FontId, MeshId, ()>;
 ```
 */
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

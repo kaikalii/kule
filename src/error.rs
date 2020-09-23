@@ -9,12 +9,19 @@ pub enum KuleError {
     /// Generic static error
     #[error("{0}")]
     Static(&'static str),
+    /// IO error
+    #[error("{0}")]
+    IO(#[from] std::io::Error),
     /// Error creating the display
     #[error("{0}")]
     DisplayCreation(#[from] glium::backend::glutin::DisplayCreationError),
     /// Bad window icon data
     #[error("{0}")]
     BadIcon(#[from] glium::glutin::window::BadIcon),
+    #[cfg(feature = "sound")]
+    /// Audio decode error
+    #[error("{0}")]
+    AudioDecode(#[from] rodio::decoder::DecoderError),
 }
 
 impl KuleError {

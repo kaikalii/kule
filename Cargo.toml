@@ -9,9 +9,13 @@ vector2math = '0.10.4'
 optional = true
 version = '0.11.0'
 
+[dependencies.crossbeam-utils]
+optional = true
+version = '*'
+
 [features]
 default = ['sound']
-sound = ['rodio']
+sound = ['rodio', 'crossbeam-utils']
 
 [package]
 authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']

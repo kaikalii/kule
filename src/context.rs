@@ -6,6 +6,11 @@ use vector2math::*;
 pub use monitor::MonitorHandle;
 pub use window::{Fullscreen, WindowId};
 
+#[cfg(feature = "sound")]
+use crate::{
+    rodio::{Sample, Source},
+    Kule, Mixer, SoundSource, Sounds,
+};
 use crate::{
     Camera, Drawer, Fonts, GlyphCache, KuleResult, MeshCache, Resources, StateTracker, Vec2,
     WindowCanvas,
@@ -80,6 +85,12 @@ where
     pub fonts: Fonts<R::FontId>,
     /// The mesh cache
     pub meshes: MeshCache<R>,
+    #[cfg(feature = "sound")]
+    /// The audio mixer
+    pub mixer: Mixer,
+    #[cfg(feature = "sound")]
+    /// The sound cache
+    pub sounds: Sounds<R::SoundId>,
     /// Whether the window should close
     pub should_close: bool,
     pub(crate) update_timer: Instant,
@@ -134,6 +145,38 @@ where
     /// Get the glyph cache for a font
     pub fn get_glyphs(&self, font_id: R::FontId) -> Option<&GlyphCache> {
         self.fonts.get(font_id)
+    }
+    #[cfg(feature = "sound")]
+    /// Play an id'd sound
+    pub fn play_sound<A>(&mut self, sound_id: R::SoundId, app: &A) -> KuleResult<()>
+    where
+        A: Kule<Resources = R>,
+    {
+        self.play_modified_sound(sound_id, app, |s| s)
+    }
+    #[cfg(feature = "sound")]
+    /// Play an id'd sound with a modified `Source`
+    pub fn play_modified_sound<A, F, S>(
+        &mut self,
+        sound_id: R::SoundId,
+        app: &A,
+        f: F,
+    ) -> KuleResult<()>
+    where
+        A: Kule<Resources = R>,
+        F: Fn(SoundSource) -> S,
+        S: Source + Send + 'static,
+        S::Item: Sample,
+    {
+        if !self.sounds.contains(sound_id) {
+            if let Some(buffer) = A::load_sound(sound_id, app)? {
+                self.sounds.insert(sound_id, buffer);
+            }
+        }
+        if let Some(buffer) = self.sounds.get(sound_id) {
+            self.mixer.play(f(SoundSource::from(buffer.clone())));
+        }
+        Ok(())
     }
 }
 
