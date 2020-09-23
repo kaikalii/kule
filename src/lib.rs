@@ -20,26 +20,6 @@ pub use vector2math::{
     f32::*, Circle, FloatingScalar, FloatingVector2, Pair, Rectangle, Scalar, Transform, Vector2,
 };
 
-pub fn translate(offset: Vec2) -> impl Fn(Trans) -> Trans {
-    move |trans| trans.translate(offset)
-}
-
-pub fn scale(ratios: Vec2) -> impl Fn(Trans) -> Trans {
-    move |trans| trans.scale(ratios)
-}
-
-pub fn rotate(radians: f32) -> impl Fn(Trans) -> Trans {
-    move |trans| trans.rotate(radians)
-}
-
-pub fn zoom(ratio: f32) -> impl Fn(Trans) -> Trans {
-    move |trans| trans.zoom(ratio)
-}
-
-pub fn rotate_about(radians: f32, pivot: Vec2) -> impl Fn(Trans) -> Trans {
-    move |trans| trans.rotate_about(radians, pivot)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -96,7 +76,9 @@ mod test {
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             let mut bordered = recter.border(Col::red(0.4), 5.0);
             bordered.draw();
-            bordered.transform(rotate_about(app.rot, app.pos)).draw();
+            bordered
+                .transform(|t| t.rotate_about(app.rot, app.pos))
+                .draw();
             drop(bordered);
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)
@@ -108,7 +90,7 @@ mod test {
                 let text_width = draw.fonts.width(text, font_size);
                 draw.line(Col::white(), [3.0, font_size, text_width, font_size], 1.0);
                 draw.text(Col::white(), text, font_size)
-                    .transform(translate([0.0, font_size]));
+                    .transform(|t| t.translate([0.0, font_size]));
                 draw.circle([1.0, 0.0, 1.0, 0.3], (ctx.tracker.mouse_pos(), 5.0), 10);
             });
             draw.circle([1.0, 1.0, 0.0, 0.3], (ctx.mouse_coords(), 5.0), 10);
