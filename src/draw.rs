@@ -252,7 +252,7 @@ where
 
     The camera used is one where window space and world space are the same
     */
-    pub fn with_absolute_camera<F, S>(&mut self, f: F) -> S
+    pub fn with_absolute_camera<F, S>(&mut self, draw: F) -> S
     where
         F: FnOnce(&mut Self) -> S,
     {
@@ -263,7 +263,7 @@ where
                 zoom: 1.0,
                 window_size: base_camera.window_size,
             },
-            f,
+            draw,
         )
     }
     /// Clear the surface with a color
