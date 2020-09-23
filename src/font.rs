@@ -64,6 +64,7 @@ pub struct GlyphSpec<G = ()> {
 }
 
 impl<G> GlyphSpec<G> {
+    /// Create a new `GlyphSpec`
     pub fn new<S>(font_id: G, size: S) -> Self
     where
         S: Into<GlyphSize>,
@@ -87,6 +88,7 @@ impl From<GlyphSize> for GlyphSpec {
     }
 }
 
+/// A cache of glyphs for each loaded font
 pub struct Fonts<G = ()>(HashMap<G, GlyphCache>);
 
 impl<G> Default for Fonts<G> {
@@ -99,6 +101,7 @@ impl<G> Fonts<G>
 where
     G: Eq + std::hash::Hash,
 {
+    /// Load a font
     pub fn load(&mut self, id: G, data: &[u8]) -> KuleResult<()> {
         self.0.insert(
             id,
@@ -108,24 +111,9 @@ where
         );
         Ok(())
     }
+    /// Get a glyph cache with the given id
     pub fn get(&self, id: G) -> Option<&GlyphCache> {
         self.0.get(&id)
-    }
-    pub fn width<S>(&self, text: &str, spec: S) -> f32
-    where
-        S: Into<GlyphSpec<G>>,
-    {
-        let spec = spec.into();
-        let mut gps = Vec::new();
-        Layout::new().layout_horizontal(
-            &[self[spec.font_id].font()],
-            &[&TextStyle::new(text, spec.size.resolution as f32, 0)],
-            &LayoutSettings {
-                ..Default::default()
-            },
-            &mut gps,
-        );
-        gps.last().map(|gp| gp.x + gp.width as f32).unwrap_or(0.0) * spec.size.ratio()
     }
 }
 
@@ -146,12 +134,22 @@ impl Deref for Fonts {
     }
 }
 
+/// Geometry defining a character glyph
 #[derive(Debug, Clone)]
 pub struct GlyphGeometry {
+    /// The vertices
     pub vertices: Vec<Vec2>,
+    /// The indices
     pub indices: Vec<u16>,
 }
 
+/**
+A cache of glyph geometry for a single font
+
+Unlike most libraries, kule uses vectorized glyphs rather than rasterized ones.
+Currently, this is achieved by first rasterizing the glyph, then using an algorithm
+to vectorize the image.
+*/
 pub struct GlyphCache {
     font: Font,
     geometry: RefCell<HashMap<(char, u32), (Metrics, GlyphGeometry)>>,
@@ -167,13 +165,15 @@ impl From<Font> for GlyphCache {
 }
 
 impl GlyphCache {
+    /// Get a reference to the font itself
     pub fn font(&self) -> &Font {
         &self.font
     }
+    /// Get the metrics of a character at some resolution
     pub fn metrics(&self, ch: char, resolution: u32) -> Metrics {
         self.glyph(ch, resolution).0
     }
-    #[allow(clippy::map_entry)]
+    /// Get a reference to the metrics and geometry of a character glyph at some resolution
     pub fn glyph(&self, ch: char, resolution: u32) -> Ref<(Metrics, GlyphGeometry)> {
         if !self.geometry.borrow().contains_key(&(ch, resolution)) {
             let glyph_data = self.vectorize(ch, resolution);
@@ -185,6 +185,7 @@ impl GlyphCache {
             geometry.get(&(ch, resolution)).unwrap()
         })
     }
+    /// Get the width of some text
     pub fn width<S>(&self, text: &str, size: S) -> f32
     where
         S: Into<GlyphSize>,

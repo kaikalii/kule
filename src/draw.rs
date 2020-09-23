@@ -24,46 +24,57 @@ fn extend_transform(trans: Trans) -> [[f32; 3]; 3] {
     [trans[0], trans[1], [0.0, 0.0, 1.0]]
 }
 
+/// A scene camera
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
+    /// The center of the scene
     pub center: Vec2,
+    /// The zoom factor
     pub zoom: f32,
     pub(crate) window_size: Vec2,
 }
 
 impl Camera {
+    /// Get the size of the window
     pub fn window_size(self) -> Vec2 {
         self.window_size
     }
+    /// Set the center
     pub fn with_center(self, center: Vec2) -> Self {
         Camera { center, ..self }
     }
+    /// Set the zoom
     pub fn with_zoom(self, zoom: f32) -> Self {
         Camera { zoom, ..self }
     }
+    /// Multiply the zoom by some factor
     pub fn zoom_by(self, by: f32) -> Self {
         Camera {
             zoom: self.zoom * by,
             ..self
         }
     }
+    /// Keep the zoom within some bounds
     pub fn bound_zoom(self, min: f32, max: f32) -> Self {
         Camera {
             zoom: self.zoom.max(min).min(max),
             ..self
         }
     }
+    /// Translate the center
     pub fn translate(self, offset: Vec2) -> Self {
         Camera {
             center: self.center.add(offset),
             ..self
         }
     }
+    /// Convert a vector from window space to world space
     pub fn pos_to_coords(self, pos: Vec2) -> Vec2 {
         pos.sub(self.window_size.div(2.0))
             .div(self.zoom)
             .add(self.center)
     }
+    /// Convert a vector frrom world space to window space
     pub fn coords_to_pos(self, coords: Vec2) -> Vec2 {
         coords
             .sub(self.center)
@@ -71,6 +82,7 @@ impl Camera {
             .mul(self.zoom)
             .add(self.window_size.div(2.0))
     }
+    /// Get the rectangle that bounds the view
     pub fn view_rect(self) -> Rect {
         Rect::centered(self.center, self.window_size.div(self.zoom))
     }
@@ -86,6 +98,13 @@ type Vertices = VertexBuffer<Vertex>;
 type Indices = IndexBuffer<u16>;
 type MeshMap<R> = HashMap<DrawType<R>, (Vertices, Indices)>;
 
+/**
+A cache for gpu geometry
+
+Most simple geometries are cached automatically. However, irregular polygons are
+not cached by default. If a shape is drawn using a `Drawer::cached_*` method,
+this cache can be accessed to remove old versions of cached meshes.
+*/
 pub struct MeshCache<R>(Rc<RefCell<MeshMap<R>>>)
 where
     R: Resources;
@@ -125,14 +144,21 @@ where
             None
         }
     }
+    /// Check if the cache contains a mesh
     pub fn contains_mesh(&self, mesh_id: R::MeshId) -> bool {
         self.contains(&DrawType::Irregular(Some(mesh_id)))
     }
+    /// Clear only the irregular cached meshes
     pub fn clear_meshes(&self) {
         self.0
             .borrow_mut()
             .retain(|draw_type, _| !matches!(draw_type, DrawType::Irregular(_)));
     }
+    /// Clear all meshes
+    pub fn clear_all(&self) {
+        self.0.borrow_mut().clear();
+    }
+    /// Move a manually cached mesh
     pub fn remove_mesh(&self, mesh_id: R::MeshId) {
         self.0
             .borrow_mut()
@@ -140,11 +166,15 @@ where
     }
 }
 
+/// Trait for defining drawing types
 pub trait Canvas {
+    /// The gpu facade
     type Facade: Facade;
+    /// The surface being drawn to
     type Surface: Surface;
 }
 
+/// The canvas used for drawing to a window
 pub struct WindowCanvas;
 
 impl Canvas for WindowCanvas {
@@ -152,6 +182,7 @@ impl Canvas for WindowCanvas {
     type Surface = Frame;
 }
 
+/// The primary struct for drawing 2d geometry
 pub struct Drawer<'ctx, T = WindowCanvas, R = ()>
 where
     T: Canvas,
@@ -160,9 +191,13 @@ where
     surface: &'ctx mut T::Surface,
     facade: &'ctx T::Facade,
     program: &'ctx Program,
+    /// The fonts
     pub fonts: &'ctx Fonts<R::FontId>,
-    meshes: &'ctx MeshCache<R>,
+    /// The mesh cache
+    pub meshes: &'ctx MeshCache<R>,
+    /// The scene camera
     pub camera: Camera,
+    /// The draw parameters
     pub draw_params: DrawParameters<'ctx>,
 }
 
@@ -192,18 +227,31 @@ where
             },
         }
     }
-    pub fn with_camera<C, F, S>(&mut self, camera: C, f: F) -> S
+    /**
+    Temporarily use a different camera for drawing
+
+    The camera is changed, the `draw` closure is called, and then
+    the camera is returned to its original state.
+    */
+    pub fn with_camera<C, F, S>(&mut self, camera: C, draw: F) -> S
     where
         C: FnOnce(Camera) -> Camera,
         F: FnOnce(&mut Self) -> S,
     {
         let base_camera = self.camera;
         self.camera = camera(base_camera);
-        let res = f(self);
+        let res = draw(self);
         self.camera = base_camera;
         res
     }
+    /**
+    Temporarily use an absolute camera for drawing
 
+    The camera is changed, the `draw` closure is called, and then
+    the camera is returned to its original state.
+
+    The camera used is one where window space and world space are the same
+    */
     pub fn with_absolute_camera<F, S>(&mut self, f: F) -> S
     where
         F: FnOnce(&mut Self) -> S,
@@ -218,12 +266,16 @@ where
             f,
         )
     }
+    /// Clear the surface with a color
+    ///
+    /// This clears the depth and stencil buffers as well
     pub fn clear<C>(&mut self, color: C)
     where
         C: Color,
     {
         self.surface.clear_all(color.map(), 0.0, 0)
     }
+    /// Draw a rectangle
     pub fn rectangle<C, E>(&mut self, color: C, rect: E) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
@@ -239,6 +291,7 @@ where
                 .translate(rect.center()),
         )
     }
+    /// Draw a circle
     pub fn circle<C, E>(
         &mut self,
         color: C,
@@ -258,6 +311,7 @@ where
                 .translate(circ.center()),
         )
     }
+    /// Draw an ellipse
     pub fn ellipse<C, E>(
         &mut self,
         color: C,
@@ -277,6 +331,7 @@ where
                 .translate(ellip.center()),
         )
     }
+    /// Draw a polygon
     pub fn polygon<'p, C, V, P>(&mut self, color: C, vertices: P) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
@@ -285,6 +340,7 @@ where
     {
         self.optionally_cached_polygon(None, color, vertices)
     }
+    /// Draw a polygon with cached geometry
     pub fn cached_polygon<'p, C, V, P>(
         &mut self,
         mesh_id: R::MeshId,
@@ -336,6 +392,7 @@ where
             Trans::identity(),
         )
     }
+    /// Draw a line
     pub fn line<C, P>(
         &mut self,
         color: C,
@@ -401,6 +458,7 @@ where
     T: Canvas,
     R: Resources,
 {
+    /// Draw a line with rounded ends
     pub fn round_line<C, P, L>(
         &mut self,
         color: C,
@@ -415,6 +473,7 @@ where
     {
         self.optionally_cached_round_line(None, color, endpoints, rl)
     }
+    /// Draw a line with rounded ends with cached geometry
     pub fn cached_round_line<C, P, L>(
         &mut self,
         mesh_id: R::MeshId,
@@ -469,6 +528,7 @@ where
             .collect();
         self.optionally_cached_polygon(mesh_id, color, &vertices)
     }
+    /// Draw a single character
     pub fn character<'drawer, C, L>(
         &'drawer mut self,
         color: C,
@@ -493,6 +553,7 @@ where
             scale_trans,
         )
     }
+    /// Draw a string of text
     pub fn text<C, L>(&mut self, color: C, string: &str, spec: L) -> Transformable<'ctx, '_, T, R>
     where
         C: Color,
@@ -650,6 +711,13 @@ struct Border {
     thickness: f32,
 }
 
+/**
+A planned draw command
+
+Drawing can be done manually with the `draw` method, but this method is
+also called automatically when the struct is dropped if it has not been
+called already.
+*/
 pub struct Transformable<'ctx, 'drawer, T, R>
 where
     T: Canvas,
@@ -668,6 +736,7 @@ where
     T: Canvas,
     R: Resources,
 {
+    /// Change the color
     pub fn color<'tfbl, C>(&'tfbl mut self, color: C) -> Transformable<'ctx, 'tfbl, T, R>
     where
         C: Color,
@@ -682,6 +751,7 @@ where
             border: self.border,
         }
     }
+    /// Apply a transformation
     pub fn transform<'tfbl, D>(
         &'tfbl mut self,
         transformation: D,
@@ -699,6 +769,7 @@ where
             border: self.border,
         }
     }
+    /// Set a border
     pub fn border<'tfbl, C>(
         &'tfbl mut self,
         color: C,
@@ -720,6 +791,7 @@ where
             }),
         }
     }
+    /// Remove the border
     pub fn no_border<'tfbl>(&'tfbl mut self) -> Transformable<'ctx, 'tfbl, T, R> {
         self.drawn = true;
         Transformable {
@@ -731,6 +803,11 @@ where
             border: None,
         }
     }
+    /**
+    Execute the draw command
+
+    This is usually called automatically
+    */
     pub fn draw(&mut self) {
         let camera_transform = self.drawer.camera.transform();
         for item in self.items.iter() {

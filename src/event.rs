@@ -9,23 +9,38 @@ pub use event::ElementState as ButtonState;
 pub use event::ModifiersState as Modifiers;
 pub use event::MouseButton;
 
+/// An input event
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
+    /// The mouse cursor's absolute position has changed
     MouseAbsolute(Vec2),
+    /// The mouse cursor's relative position has changed
     MouseRelative(Vec2),
+    /// A mouse button's state has changed
     MouseButton {
+        /// The mouse button
         button: MouseButton,
+        /// The new state
         state: ButtonState,
     },
+    /// A key's state has changed
     Key {
+        /// The key
         key: Key,
+        /// The scancode
         scancode: u32,
+        /// The new state
         state: ButtonState,
     },
+    /// The window was resized
     Resize(Vec2),
+    /// The window was moved
     Move(Vec2),
+    /// The window has gained or lost focus
     Focus(bool),
+    /// The mouse wheel was scrolled
     Scroll(Vec2),
+    /// The window was requested to close
     CloseRequest,
 }
 
@@ -98,6 +113,11 @@ impl Event {
     }
 }
 
+/**
+Tracks various input states
+
+The context updates its `StateTracker` automatically.
+*/
 #[derive(Debug, Clone, Default)]
 pub struct StateTracker {
     mouse_pos: Vec2,
@@ -108,27 +128,44 @@ pub struct StateTracker {
 }
 
 impl StateTracker {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    /// Get the position of the mouse cursor in window space
     pub fn mouse_pos(&self) -> Vec2 {
         self.mouse_pos
     }
+    /// Get the state of modifier keys
     pub fn modifiers(&self) -> Modifiers {
         self.modifiers
     }
+    /// Get the state of a key
     pub fn key(&self, key: Key) -> bool {
         self.keys.contains(&key)
     }
+    /// Get the state of a mouse button
     pub fn mouse_button(&self, mb: MouseButton) -> bool {
         self.mouse_buttons.contains(&mb)
     }
-    pub fn key_diff(&self, neg: Key, pos: Key) -> f32 {
+    /**
+    Get a scalar representing the difference between two key states
+
+    This is useful for times when you need two keys to represent different
+    directions of some control, i.e. zooming in and out with +-.
+    */
+    pub fn key_diff_scalar(&self, neg: Key, pos: Key) -> f32 {
         self.key(pos) as i8 as f32 - self.key(neg) as i8 as f32
     }
-    pub fn key_diff2(&self, left: Key, right: Key, up: Key, down: Key) -> Vec2 {
-        [self.key_diff(left, right), self.key_diff(up, down)]
+    /**
+    Get a vector representing the difference between two pairs of key states
+
+    This is useful for times when you need four keys to represent different
+    directions of some control, i.e. controlling a character with WASD.
+    */
+    pub fn key_diff_vector(&self, left: Key, right: Key, up: Key, down: Key) -> Vec2 {
+        [
+            self.key_diff_scalar(left, right),
+            self.key_diff_scalar(up, down),
+        ]
     }
+    /// Get the temporally-normalized frames per second
     pub fn fps(&self) -> f32 {
         self.fps
     }
@@ -163,6 +200,7 @@ impl<T> Iterator for Two<T> {
 
 macro_rules! keys {
     ($(($key:ident, $glutinkey:ident),)*) => {
+        #[allow(missing_docs)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum Key {
             $($key,)*

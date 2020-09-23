@@ -1,4 +1,12 @@
 #![allow(clippy::single_match)]
+#![warn(missing_docs)]
+
+/*!
+A textureless 2d game engine
+
+Kule is a game engine with a focus on rendering vector graphics. It has no support for textures or sprites.
+This makes making games easier for the unartistic programmer, but restricts art style.
+*/
 
 mod app;
 pub use app::*;
@@ -28,7 +36,7 @@ mod test {
         pos: Vec2,
         rot: f32,
     }
-    type Recs = VaryMeshes<&'static str>;
+    type Recs = GenericResources<(), &'static str>;
     impl Kule for App {
         type Resources = Recs;
         fn setup(ctx: &mut Context<Recs>) -> Self {
@@ -41,12 +49,12 @@ mod test {
             }
         }
         fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) {
-            let wasd = ctx.tracker.key_diff2(Key::A, Key::D, Key::W, Key::S);
+            let wasd = ctx.tracker.key_diff_vector(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
-                .key_diff2(Key::Left, Key::Right, Key::Up, Key::Down);
-            let plus_minus = ctx.tracker.key_diff(Key::Minus, Key::Equals);
-            let qe = ctx.tracker.key_diff(Key::Q, Key::E);
+                .key_diff_vector(Key::Left, Key::Right, Key::Up, Key::Down);
+            let plus_minus = ctx.tracker.key_diff_scalar(Key::Minus, Key::Equals);
+            let qe = ctx.tracker.key_diff_scalar(Key::Q, Key::E);
             app.pos.add_assign(wasd.mul(100.0 * dt));
             app.rot += qe * dt;
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));

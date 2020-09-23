@@ -7,21 +7,34 @@ use crate::{
     StateTracker, Window,
 };
 
+/**
+The primary trait that defines app behavior
+*/
 #[allow(unused_variables)]
 pub trait Kule: Sized + 'static {
+    /// The resources type
     type Resources: Resources;
+    /// Build the context
     fn build() -> ContextBuilder {
         ContextBuilder::default()
     }
+    /// Build the app
     fn setup(ctx: &mut Context<Self::Resources>) -> Self;
+    /// Update function called often
+    ///
+    /// `dt` is the amount of time that has passed since the last update
     fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self::Resources>) {}
+    /// Draw
     fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, ctx: &Context<Self::Resources>)
     where
         C: Canvas,
     {
     }
+    /// Handle events
     fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {}
+    /// Called when the app is closed
     fn teardown(app: Self, ctx: &mut Context<Self::Resources>) {}
+    /// Run the app
     fn run() -> KuleResult<()> {
         let mut builder = Self::build();
         // Build event loop and display
@@ -49,7 +62,7 @@ pub trait Kule: Sized + 'static {
             program,
             fonts: Default::default(),
             meshes: Default::default(),
-            tracker: StateTracker::new(),
+            tracker: StateTracker::default(),
             camera: Camera {
                 center: [0.0; 2],
                 zoom: 1.0,
@@ -100,8 +113,11 @@ pub trait Kule: Sized + 'static {
     }
 }
 
+/// Resource id types for an app
 pub trait Resources: Copy + Eq + Hash {
+    /// The id used to identify fonts
     type FontId: ResourceId;
+    /// The id used to identity irregular cached meshes
     type MeshId: ResourceId;
 }
 
@@ -110,12 +126,33 @@ impl Resources for () {
     type MeshId = ();
 }
 
+/// An id for app resources
 pub trait ResourceId: Copy + Eq + Hash + Debug {}
 
 impl<T> ResourceId for T where T: Copy + Eq + Hash + Debug {}
 
+/**
+A generic resources type
+
+This type makes it easy to construct your own resources type
+
+```
+# use kule::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum FontId {
+    ComicSans,
+    Papyrus
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct MeshId(u32);
+
+type MrRecs = GenericResources<FontId, MeshId>;
+```
+*/
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GenericResources<F, M>(PhantomData<F>, PhantomData<M>);
+pub struct GenericResources<FontId, MeshId>(PhantomData<FontId>, PhantomData<MeshId>);
 
 impl<F, M> Resources for GenericResources<F, M>
 where
@@ -125,5 +162,3 @@ where
     type FontId = F;
     type MeshId = M;
 }
-
-pub type VaryMeshes<M> = GenericResources<(), M>;

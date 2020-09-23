@@ -10,3 +10,4 @@ authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']
 edition = '2018'
 name = 'kule'
 version = '0.1.0'
+description = 'A textureless 2d game engine'
