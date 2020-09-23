@@ -32,7 +32,7 @@ impl Kule for App {
         let tracker = &ctx.tracker;
         // We can easily create a control vector to control the positon with WASD
         let wasd = tracker.key_diff_vector(Key::A, Key::D, Key::W, Key::S);
-        const SPEED: f32 = 200.0;
+        const SPEED: f32 = 300.0;
         app.pos.add_assign(wasd.mul(SPEED * dt));
         // Lets control the rotation with Q and E
         let qe = tracker.key_diff_scalar(Key::Q, Key::E);
@@ -89,8 +89,8 @@ impl Kule for App {
             drop(text);
 
             // We can draw text with different resolutions
-            // Resolutions below 40 should probably be avoided but this depends on the font
-            let glyph_size = GlyphSize::new(80.0).resolution(50);
+            // Resolutions below 60 should probably be avoided but this depends on the font
+            let glyph_size = GlyphSize::new(80.0).resolution(60);
             // Lets use this different text resolution to draw an fps counter
             let fps_offset = [0.0, draw.camera.window_size().y() - 20.0];
             draw.text(
