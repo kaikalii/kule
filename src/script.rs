@@ -3,10 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rlua::{Lua, StdLib};
+use rlua::{Function, Lua, StdLib, Table};
 
 use crate::KuleResult;
 
+pub use rlua;
 pub use rlua::Context as LuaContext;
 
 /// Defines where script modules should be saved to and loaded from
@@ -19,11 +20,22 @@ pub struct ScriptEnv {
     /// This will be joined onto `dir` and given a `toml` extension
     pub config: String,
     /// The Lua standard library to use
+    ///
+    /// An error will occur if you include `StdLib::DEBUG`. `ScriptEnv::new`
+    /// automatically removes `DEBUG` from whatever flags you pass it.
     pub std_lib: StdLib,
+}
+
+impl Default for ScriptEnv {
+    fn default() -> Self {
+        ScriptEnv::new("modules", "modules", StdLib::ALL & !StdLib::IO)
+    }
 }
 
 impl ScriptEnv {
     /// Create a new `ScriptEnv
+    ///
+    /// `StdLib::DEBUG` is automatically removed for safety reasons.
     pub fn new<D, C>(dir: D, config: C, std_lib: StdLib) -> Self
     where
         D: AsRef<Path>,
@@ -32,7 +44,7 @@ impl ScriptEnv {
         ScriptEnv {
             dir: dir.as_ref().into(),
             config: config.into(),
-            std_lib,
+            std_lib: std_lib & !StdLib::DEBUG,
         }
     }
     /// Get the path to the config file
@@ -85,7 +97,7 @@ impl Scripts {
         let (lua, modules) = self.lua(|_| -> KuleResult<_> {
             let modules_bytes = fs::read(self.env.config_path())?;
             let modules: Modules = toml::from_slice(&modules_bytes)?;
-            let lua = unsafe { Lua::unsafe_new_with(self.env.std_lib) };
+            let lua = Lua::new_with(self.env.std_lib);
             lua.context(|ctx| -> rlua::Result<()> {
                 // Load modules
                 ctx.load(
@@ -114,6 +126,37 @@ impl Scripts {
             .save(&self.env.config_path())
         })??;
         Ok(())
+    }
+    /// Iterate over the names of the enabled modules
+    pub fn enabled_modules(&self) -> impl Iterator<Item = &str> {
+        self.modules
+            .iter()
+            .filter(|m| m.enabled)
+            .map(|m| m.name.as_str())
+    }
+    /**
+    Call the same function in each module that has it
+
+    Module order is respected.
+
+    This makes it easy to have multiple modules define the same type of behavior
+    and execute it all at once.
+    */
+    pub fn batch_call<'a, F>(&'a self, function_name: &str, call: F) -> KuleResult<()>
+    where
+        F: Fn(Function) -> rlua::Result<()>,
+    {
+        self.lua(move |ctx| -> KuleResult<()> {
+            let globals = ctx.globals();
+            for name in self.enabled_modules() {
+                if let Ok(module) = globals.get::<_, Table>(name) {
+                    if let Ok(function) = module.get::<_, Function>(function_name) {
+                        call(function)?;
+                    }
+                }
+            }
+            Ok(())
+        })?
     }
 }
 

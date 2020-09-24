@@ -91,6 +91,9 @@ where
     #[cfg(feature = "sound")]
     /// The sound cache
     pub sounds: Sounds<R::SoundId>,
+    #[cfg(feature = "script")]
+    /// The scripting environment
+    pub scripts: KuleResult<crate::Scripts>,
     /// Whether the window should close
     pub should_close: bool,
     pub(crate) update_timer: Instant,
@@ -120,6 +123,11 @@ where
         );
         f(&mut drawer);
         frame.finish().unwrap();
+    }
+    #[cfg(feature = "script")]
+    /// Get a reference to the scripting environment
+    pub fn scripts(&self) -> Result<&crate::Scripts, &crate::KuleError> {
+        self.scripts.as_ref()
     }
 }
 
@@ -209,6 +217,9 @@ pub struct ContextBuilder {
     pub samples: u16,
     /// The window's icon
     pub icon: Option<window::Icon>,
+    #[cfg(feature = "script")]
+    /// Configuration for the scripting environment
+    pub script_env: crate::ScriptEnv,
 }
 
 impl Default for ContextBuilder {
@@ -220,6 +231,8 @@ impl Default for ContextBuilder {
             update_frequency: 120.0,
             samples: 0,
             icon: None,
+            #[cfg(feature = "script")]
+            script_env: crate::ScriptEnv::default(),
         }
     }
 }
@@ -266,5 +279,10 @@ impl ContextBuilder {
             icon: Some(window::Icon::from_rgba(rgba, width, height)?),
             ..self
         })
+    }
+    #[cfg(feature = "script")]
+    /// Configure the scripting environment
+    pub fn script_env(self, script_env: crate::ScriptEnv) -> Self {
+        ContextBuilder { script_env, ..self }
     }
 }
