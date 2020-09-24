@@ -38,6 +38,8 @@ function core:fps() return self.tracker.fps end
 --     print()
 -- end
 function core:update(dt)
+    f = 5
+    print(f[1])
     if has_value(self.tracker.keys, "R") then self.rot = self.rot + dt end
 end
 
