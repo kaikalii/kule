@@ -51,6 +51,10 @@ pub use font::*;
 mod sound;
 #[cfg(feature = "sound")]
 pub use sound::*;
+#[cfg(feature = "script")]
+mod script;
+#[cfg(feature = "script")]
+pub use script::*;
 
 pub use vector2math::{
     f32::*, Circle, FloatingScalar, FloatingVector2, Rectangle, Scalar, Transform, Vector2,

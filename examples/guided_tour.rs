@@ -136,7 +136,7 @@ impl Kule for App {
         sound_id: <Self::Resources as Resources>::SoundId,
         _app: &Self,
     ) -> KuleResult<Option<SoundBuffer>> {
-        let bytes = match sound_id {
+        let bytes: &[u8] = match sound_id {
             SoundId::Kick => include_bytes!("kick.ogg").as_ref(),
             SoundId::Noise => include_bytes!("noise.ogg").as_ref(),
         };

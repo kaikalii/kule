@@ -5,17 +5,45 @@ lyon_tessellation = '0.16.0'
 thiserror = '1.0.20'
 vector2math = '0.10.4'
 
+[dependencies.crossbeam-utils]
+optional = true
+version = '0.7.2'
+
+[dependencies.rlua]
+optional = true
+version = '0.17.0'
+
 [dependencies.rodio]
 optional = true
 version = '0.11.0'
 
-[dependencies.crossbeam-utils]
+[dependencies.serde]
 optional = true
-version = '*'
+version = '1.0.116'
+
+[dependencies.serde_derive]
+optional = true
+version = '1.0.116'
+
+[dependencies.toml]
+optional = true
+version = '0.5.6'
 
 [features]
-default = ['sound']
-sound = ['rodio', 'crossbeam-utils']
+default = [
+    'sound',
+    'script',
+]
+script = [
+    'rlua',
+    'serde',
+    'serde_derive',
+    'toml',
+]
+sound = [
+    'rodio',
+    'crossbeam-utils',
+]
 
 [package]
 authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']

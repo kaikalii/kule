@@ -22,6 +22,18 @@ pub enum KuleError {
     /// Audio decode error
     #[error("{0}")]
     AudioDecode(#[from] rodio::decoder::DecoderError),
+    #[cfg(feature = "script")]
+    /// A toml serialization error
+    #[error("{0}")]
+    TomlSerialize(#[from] toml::ser::Error),
+    #[cfg(feature = "script")]
+    /// A toml deserialization error
+    #[error("{0}")]
+    TomlDeserialize(#[from] toml::de::Error),
+    #[cfg(feature = "script")]
+    /// A lua error
+    #[error("{0}")]
+    Lua(#[from] rlua::Error),
 }
 
 impl KuleError {
