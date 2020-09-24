@@ -152,5 +152,7 @@ impl Kule for App {
 }
 
 fn main() {
-    App::run().unwrap();
+    // This will panic if the initial context or app setup fail.
+    // Otherwise, it will exit the process when the window is closed.
+    App::run_or_panic()
 }

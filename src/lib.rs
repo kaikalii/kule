@@ -186,6 +186,6 @@ mod test {
 
     #[test]
     fn test() {
-        App::run().unwrap_or_else(|e| panic!("{}", e));
+        App::run_or_panic();
     }
 }

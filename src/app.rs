@@ -60,6 +60,11 @@ pub trait Kule: Sized + 'static {
     fn handle_error(error: crate::KuleError, app: &mut Self, ctx: &mut Context<Self::Resources>) {
         panic!("{}", error)
     }
+    /// Run the app and panic if setup fails
+    fn run_or_panic() -> ! {
+        Self::run().unwrap_or_else(|e| panic!("{}", e));
+        std::process::exit(0)
+    }
     /// Run the app
     ///
     /// This takes control of the current thread. If initial setup does not fail, then this
