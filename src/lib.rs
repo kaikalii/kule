@@ -66,7 +66,6 @@ mod test {
     #[derive(Debug)]
     struct App {
         pos: Vec2,
-        rot: f32,
     }
     type Recs = GenericResources<(), (), &'static str>;
     impl Kule for App {
@@ -85,10 +84,7 @@ mod test {
             if let Err(e) = ctx.scripts() {
                 println!("Error initializing scripts: {}", e);
             }
-            Ok(App {
-                pos: [0.0; 2],
-                rot: 1.0,
-            })
+            Ok(App { pos: [0.0; 2] })
         }
         fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) {
             let wasd = ctx.tracker.key_diff_vector(Key::A, Key::D, Key::W, Key::S);
@@ -96,9 +92,7 @@ mod test {
                 .tracker
                 .key_diff_vector(Key::Left, Key::Right, Key::Up, Key::Down);
             let plus_minus = ctx.tracker.key_diff_scalar(Key::Minus, Key::Equals);
-            let qe = ctx.tracker.key_diff_scalar(Key::Q, Key::E);
             app.pos.add_assign(wasd.mul(100.0 * dt));
-            app.rot += qe * dt;
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom_by(1.1f32.powf(plus_minus * dt * 10.0));
             if let Ok(scripts) = ctx.scripts() {
@@ -107,7 +101,7 @@ mod test {
                         let mut ser = LuaSerializer::new(lua);
                         let value = ser.serialize(&ctx.tracker)?;
                         lua.globals()
-                            .get::<_, rlua::Table>("core")?
+                            .val::<rlua::Table>("core")?
                             .set("tracker", value)?;
                         Ok(())
                     })
@@ -153,9 +147,15 @@ mod test {
             let mut recter = draw.rectangle(Col::red(1.0), rect);
             let mut bordered = recter.border(Col::red(0.4), 3.0);
             bordered.draw();
-            bordered
-                .transform(|t| t.rotate_about(app.rot, app.pos))
-                .draw();
+            let rot = ctx
+                .lua(|lua| {
+                    Ok(lua
+                        .globals()
+                        .val::<rlua::Table>("core")?
+                        .val::<f32>("rot")?)
+                })
+                .unwrap();
+            bordered.transform(|t| t.rotate_about(rot, app.pos)).draw();
             drop(bordered);
             drop(recter);
             draw.circle([1.0, 0.5, 0.5], (app.pos, 15.0), 32)

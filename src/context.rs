@@ -122,12 +122,30 @@ where
             self.camera,
         );
         f(&mut drawer);
+        // #[cfg(feature = "script")]
+        // if let Ok(scripts) = self.scripts() {}
         frame.finish().unwrap();
     }
     #[cfg(feature = "script")]
     /// Get a reference to the scripting environment
     pub fn scripts(&self) -> Result<&crate::Scripts, &crate::KuleError> {
         self.scripts.as_ref()
+    }
+    #[cfg(feature = "script")]
+    /**
+    Access the scripting environment's Lua context
+
+    For the duration of the passed closue, the program's current directory
+    will be the script modules directory
+    */
+    pub fn lua<F, O>(&self, f: F) -> KuleResult<O>
+    where
+        F: FnOnce(crate::LuaContext) -> KuleResult<O>,
+    {
+        match self.scripts() {
+            Ok(scripts) => scripts.lua(f),
+            Err(e) => Err(crate::KuleError::ScriptInitialization(e.to_string())),
+        }
     }
 }
 

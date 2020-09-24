@@ -38,6 +38,10 @@ pub enum KuleError {
     /// A lua serialization error
     #[error("{0}")]
     LuaSerialization(#[from] crate::LuaSerializeError),
+    #[cfg(feature = "script")]
+    /// A scripting enevironment initialization error
+    #[error("The scripting environment failed to initialize: {0}")]
+    ScriptInitialization(String),
 }
 
 impl KuleError {

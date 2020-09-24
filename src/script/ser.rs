@@ -317,9 +317,7 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        let table = self.ctx.create_table()?;
-        table.set("variant", variant)?;
-        self.output = Value::Table(table);
+        self.output = Value::String(self.ctx.create_string(variant)?);
         Ok(())
     }
     fn serialize_newtype_struct<T: ?Sized>(

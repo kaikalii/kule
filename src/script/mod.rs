@@ -8,14 +8,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rlua::{Function, Lua, Table};
+use rlua::{FromLua, Function, Lua, ToLua};
 use serde::ser::*;
 
 use crate::KuleResult;
 
 pub use rlua;
 pub use rlua::Context as LuaContext;
-pub use rlua::StdLib;
+pub use rlua::{StdLib, Table};
 
 /// Defines where script modules should be saved to and loaded from
 #[derive(Debug, Clone)]
@@ -80,7 +80,6 @@ impl Scripts {
     For the duration of the passed closue, the program's current directory
     will be the script modules directory
     */
-    #[allow(clippy::redundant_closure)]
     pub fn lua<F, R>(&self, f: F) -> KuleResult<R>
     where
         F: FnOnce(LuaContext) -> KuleResult<R>,
@@ -171,8 +170,7 @@ impl Scripts {
     {
         self.lua(|ctx| {
             let globals = ctx.globals();
-            let table: Table =
-                unsafe { std::mem::transmute(globals.get::<_, Table>(module_name)?) };
+            let table: Table = unsafe { std::mem::transmute(globals.val::<Table>(module_name)?) };
             if let Ok(function) = table.get(method_name) {
                 call(unsafe { std::mem::transmute(ctx) }, table.clone(), function)?;
             }
@@ -242,5 +240,25 @@ impl Modules {
         let bytes = toml::to_vec(self)?;
         fs::write(path, &bytes)?;
         Ok(())
+    }
+}
+
+/// Convenience methods for a Lua tables
+pub trait TableExt<'lua, K> {
+    /// Get a value based on a key
+    fn val<V>(&self, key: K) -> KuleResult<V>
+    where
+        V: FromLua<'lua>;
+}
+
+impl<'lua, K> TableExt<'lua, K> for Table<'lua>
+where
+    K: ToLua<'lua>,
+{
+    fn val<V>(&self, key: K) -> KuleResult<V>
+    where
+        V: FromLua<'lua>,
+    {
+        Ok(Table::get::<K, V>(self, key)?)
     }
 }

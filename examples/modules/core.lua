@@ -11,13 +11,34 @@ local function tprint(tbl, indent)
     end
 end
 
-local core = {tracker = {}}
+local function table_eq(a, b)
+    if type(a) == "table" then
+        for a_key, a_val in pairs(a) do
+            if not table_eq(a_val, b[a_key]) then return false end
+        end
+        return true
+    else
+        return a == b
+    end
+end
+
+local function has_value(tab, val)
+    for _, value in pairs(tab) do
+        if table_eq(value, val) then return true end
+    end
+    return false
+end
+
+local core = {rot = 1.0, tracker = {}}
 
 function core:print_tracker() tprint(self.tracker, 0) end
 function core:fps() return self.tracker.fps end
-function core:event(event)
-    tprint(event)
-    print()
+-- function core:event(event)
+--     tprint(event)
+--     print()
+-- end
+function core:update(dt)
+    if has_value(self.tracker.keys, "R") then self.rot = self.rot + dt end
 end
 
 return core
