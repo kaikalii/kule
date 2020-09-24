@@ -135,7 +135,20 @@ pub trait Kule: Sized + 'static {
                     }
                     break;
                 } else if let Some(app) = &mut app {
+                    // Run app event method
                     Self::event(event, app, &mut ctx);
+                    // Run event scripts
+                    #[cfg(feature = "script")]
+                    if let Ok(scripts) = ctx.scripts() {
+                        if let Err(e) = scripts.batch_call("event", move |lua, t, f| {
+                            let mut ser = crate::LuaSerializer::new(lua);
+                            let event = ser.serialize(&event)?;
+                            f.call((t, event))?;
+                            Ok(())
+                        }) {
+                            Self::handle_script_error(e, app, &mut ctx);
+                        }
+                    }
                 }
             }
             // Update
@@ -144,10 +157,15 @@ pub trait Kule: Sized + 'static {
             if dt >= 1.0 / update_frequency {
                 ctx.update_timer = now;
                 if let Some(app) = &mut app {
+                    // Run app update method
                     Self::update(dt, app, &mut ctx);
+                    // Run update scripts
                     #[cfg(feature = "script")]
                     if let Ok(scripts) = ctx.scripts() {
-                        if let Err(e) = scripts.batch_call("update", |f| Ok(f.call(dt)?)) {
+                        if let Err(e) = scripts.batch_call("update", move |_, t, f| {
+                            f.call((t, dt))?;
+                            Ok(())
+                        }) {
                             Self::handle_script_error(e, app, &mut ctx);
                         }
                     }

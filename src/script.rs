@@ -155,28 +155,46 @@ impl Scripts {
             .map(|m| m.name.as_str())
     }
     /**
-    Call the same function in each module that has it
+    Call a module method
+
+    The `call` closure takes the Lua context, the module table, and the function.
+    This allows the method to be defined with either a `.` or a `:`.
+
+    Nothing happens if the module table does not contain the method
+    */
+    pub fn call<'lua, F>(&self, module_name: &str, method_name: &str, call: F) -> KuleResult<()>
+    where
+        F: Fn(LuaContext<'lua>, Table<'lua>, Function<'lua>) -> KuleResult<()>,
+    {
+        self.lua(|ctx| {
+            let globals = ctx.globals();
+            let table: Table =
+                unsafe { std::mem::transmute(globals.get::<_, Table>(module_name)?) };
+            if let Ok(function) = table.get(method_name) {
+                call(unsafe { std::mem::transmute(ctx) }, table.clone(), function)?;
+            }
+            Ok(())
+        })
+    }
+    /**
+    Call the same method in each module that has it
+
+    The `call` closure takes the Lua context, the module table, and the function.
+    This allows the method to be defined with either a `.` or a `:`.
 
     Module order is respected.
 
     This makes it easy to have multiple modules define the same type of behavior
     and execute it all at once.
     */
-    pub fn batch_call<'a, F>(&'a self, function_name: &str, call: F) -> KuleResult<()>
+    pub fn batch_call<'lua, F>(&self, method_name: &str, call: F) -> KuleResult<()>
     where
-        F: Fn(Function) -> KuleResult<()>,
+        F: Fn(LuaContext<'lua>, Table<'lua>, Function<'lua>) -> KuleResult<()>,
     {
-        self.lua(move |ctx| {
-            let globals = ctx.globals();
-            for name in self.enabled_modules() {
-                if let Ok(module) = globals.get::<_, Table>(name) {
-                    if let Ok(function) = module.get::<_, Function>(function_name) {
-                        call(function)?;
-                    }
-                }
-            }
-            Ok(())
-        })
+        for name in self.enabled_modules() {
+            self.call(name, method_name, &call)?;
+        }
+        Ok(())
     }
 }
 

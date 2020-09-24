@@ -15,5 +15,9 @@ local core = {tracker = {}}
 
 function core:print_tracker() tprint(self.tracker, 0) end
 function core:fps() return self.tracker.fps end
+function core:event(event)
+    tprint(event)
+    print()
+end
 
 return core
