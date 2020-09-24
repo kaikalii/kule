@@ -147,7 +147,7 @@ pub trait Kule: Sized + 'static {
                     Self::update(dt, app, &mut ctx);
                     #[cfg(feature = "script")]
                     if let Ok(scripts) = ctx.scripts() {
-                        if let Err(e) = scripts.batch_call("update", |f| f.call(dt)) {
+                        if let Err(e) = scripts.batch_call("update", |f| Ok(f.call(dt)?)) {
                             Self::handle_script_error(e, app, &mut ctx);
                         }
                     }

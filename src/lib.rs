@@ -71,10 +71,20 @@ mod test {
     type Recs = GenericResources<(), (), &'static str>;
     impl Kule for App {
         type Resources = Recs;
+        fn build() -> KuleResult<ContextBuilder> {
+            Ok(ContextBuilder::new().script_env(ScriptEnv::new(
+                "examples/modules",
+                "modules",
+                StdLib::ALL,
+            )))
+        }
         fn setup(ctx: &mut Context<Recs>) -> KuleResult<Self> {
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
+            if let Err(e) = ctx.scripts() {
+                println!("Error initializing scripts: {}", e);
+            }
             Ok(App {
                 pos: [0.0; 2],
                 rot: 1.0,
@@ -91,6 +101,18 @@ mod test {
             app.rot += qe * dt;
             ctx.camera.center.add_assign(arrows.mul(100.0 * dt));
             ctx.camera = ctx.camera.zoom_by(1.1f32.powf(plus_minus * dt * 10.0));
+            if let Ok(scripts) = ctx.scripts() {
+                scripts
+                    .lua(|lua| {
+                        let mut ser = LuaSerializer::new(lua);
+                        let value = ser.serialize(&ctx.tracker)?;
+                        lua.globals()
+                            .get::<_, rlua::Table>("core")?
+                            .set("tracker", value)?;
+                        Ok(())
+                    })
+                    .unwrap();
+            }
         }
         fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) {
             match event {
@@ -105,12 +127,20 @@ mod test {
                     ctx.camera.center.sub_assign(new_coords.sub(old_coords));
                 }
                 Event::Key {
-                    key: Key::Space,
+                    key,
                     state: ButtonState::Pressed,
                     ..
-                } => {
-                    ctx.play_sound("examples/kick.ogg", app).unwrap();
-                }
+                } => match key {
+                    Key::Space => ctx.play_sound("examples/kick.ogg", app).unwrap(),
+                    Key::T => {
+                        if let Ok(scripts) = ctx.scripts() {
+                            scripts
+                                .lua(|ctx| Ok(ctx.load("core:print_tracker()").eval()?))
+                                .unwrap();
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }

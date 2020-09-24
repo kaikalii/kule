@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use glium::glutin::event::{self, *};
+use glutin::event::{self, *};
 use vector2math::*;
 
 use crate::{Camera, Vec2};
@@ -11,6 +11,10 @@ pub use event::MouseButton;
 
 /// An input event
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(
+    feature = "ser",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
 pub enum Event {
     /// The mouse cursor's absolute position has changed
     MouseAbsolute(Vec2),
@@ -119,6 +123,10 @@ Tracks various input states
 The context updates its `StateTracker` automatically.
 */
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(
+    feature = "ser",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
 pub struct StateTracker {
     mouse_pos: Vec2,
     modifiers: Modifiers,
@@ -202,6 +210,10 @@ macro_rules! keys {
     ($(($key:ident, $glutinkey:ident),)*) => {
         #[allow(missing_docs)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[cfg_attr(
+            feature = "ser",
+            derive(serde_derive::Serialize, serde_derive::Deserialize)
+        )]
         pub enum Key {
             $($key,)*
             Unknown

@@ -4,6 +4,7 @@ glium = '0.27.0'
 lyon_tessellation = '0.16.0'
 thiserror = '1.0.20'
 vector2math = '0.10.4'
+glutin = '0.24.1'
 
 [dependencies.crossbeam-utils]
 optional = true
@@ -30,20 +31,10 @@ optional = true
 version = '0.5.6'
 
 [features]
-default = [
-    'sound',
-    'script',
-]
-script = [
-    'rlua',
-    'serde',
-    'serde_derive',
-    'toml',
-]
-sound = [
-    'rodio',
-    'crossbeam-utils',
-]
+default = ['sound', 'script']
+script = ['ser', 'rlua', 'toml', 'glutin/serde']
+sound = ['rodio', 'crossbeam-utils']
+ser = ['serde', 'serde_derive']
 
 [package]
 authors = ['Kai Schmidt <kaikaliischmidt@gmail.com>']
