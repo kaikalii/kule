@@ -5,7 +5,7 @@ use std::{
 
 use rlua::{Function, Lua, StdLib, Table};
 
-use crate::KuleResult;
+use crate::{KuleError, KuleResult};
 
 pub use rlua;
 pub use rlua::Context as LuaContext;
@@ -142,9 +142,10 @@ impl Scripts {
     This makes it easy to have multiple modules define the same type of behavior
     and execute it all at once.
     */
-    pub fn batch_call<'a, F>(&'a self, function_name: &str, call: F) -> KuleResult<()>
+    pub fn batch_call<'a, F, E>(&'a self, function_name: &str, call: F) -> KuleResult<()>
     where
-        F: Fn(Function) -> rlua::Result<()>,
+        F: Fn(Function) -> Result<(), E>,
+        KuleError: From<E>,
     {
         self.lua(move |ctx| -> KuleResult<()> {
             let globals = ctx.globals();
