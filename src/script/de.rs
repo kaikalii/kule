@@ -1,4 +1,6 @@
-use std::{convert::TryFrom, fmt, num::TryFromIntError};
+#![allow(dead_code, unused_variables, missing_docs)]
+
+use std::{fmt, num::TryFromIntError};
 
 use rlua::{FromLua, Table, Value};
 use serde::de::*;
@@ -244,11 +246,11 @@ impl<'de, 'a, 'lua> Deserializer<'de> for &'a mut LuaDeserializer<'lua> {
     {
         visitor.visit_seq(LuaSeqAccess::new(self))
     }
-    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        visitor.visit_seq(LuaSeqAccess::new(self))
     }
     fn deserialize_tuple_struct<V>(
         self,
