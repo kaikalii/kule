@@ -78,15 +78,13 @@ mod test {
             )))
         }
         fn setup(ctx: &mut Context<Recs>) -> KuleResult<Self> {
+            ctx.scripts()?;
             ctx.load_font((), include_bytes!("../examples/firacode.ttf").as_ref())
                 .unwrap();
             ctx.camera.zoom = 4.0;
-            if let Err(e) = ctx.scripts() {
-                println!("Error initializing scripts: {}", e);
-            }
             Ok(App { pos: [0.0; 2] })
         }
-        fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) {
+        fn update(dt: f32, app: &mut Self, ctx: &mut Context<Recs>) -> CanFail {
             let wasd = ctx.tracker.key_diff_vector(Key::A, Key::D, Key::W, Key::S);
             let arrows = ctx
                 .tracker
@@ -107,8 +105,9 @@ mod test {
                     })
                     .unwrap();
             }
+            Ok(())
         }
-        fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) {
+        fn event(event: Event, app: &mut Self, ctx: &mut Context<Recs>) -> CanFail {
             match event {
                 Event::MouseButton {
                     button: MouseButton::Left,
@@ -137,8 +136,9 @@ mod test {
                 },
                 _ => {}
             }
+            Ok(())
         }
-        fn draw<C>(draw: &mut Drawer<C, Recs>, app: &Self, ctx: &Context<Recs>)
+        fn draw<C>(draw: &mut Drawer<C, Recs>, app: &Self, ctx: &Context<Recs>) -> CanFail
         where
             C: Canvas,
         {
@@ -171,6 +171,7 @@ mod test {
                 draw.circle([1.0, 0.0, 1.0, 0.3], (ctx.tracker.mouse_pos(), 5.0), 10);
             });
             draw.circle([1.0, 1.0, 0.0, 0.3], (ctx.mouse_coords(), 5.0), 10);
+            Ok(())
         }
         fn teardown(app: Self, _: &mut Context<Recs>) {
             println!("{:?}", app);
@@ -185,6 +186,6 @@ mod test {
 
     #[test]
     fn test() {
-        App::run().unwrap();
+        App::run().unwrap_or_else(|e| panic!("{}", e));
     }
 }

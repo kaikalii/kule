@@ -39,7 +39,7 @@ impl Kule for App {
         })
     }
     // The `update` method is called often and lets us update app state absed on time
-    fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self::Resources>) {
+    fn update(dt: f32, app: &mut Self, ctx: &mut Context<Self::Resources>) -> CanFail {
         // The tracker tracks various input state
         let tracker = &ctx.tracker;
         // We can easily create a control vector to control the positon with WASD
@@ -55,9 +55,10 @@ impl Kule for App {
         // Lets control the camera's zoom with + and -
         let plus_minus = tracker.key_diff_scalar(Key::Minus, Key::Equals);
         ctx.camera.zoom *= 1.1f32.powf(plus_minus * dt * 10.0);
+        Ok(())
     }
     // The `event` method lets us handle events
-    fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) {
+    fn event(event: Event, app: &mut Self, ctx: &mut Context<Self::Resources>) -> CanFail {
         match event {
             // Check for a left-click
             Event::MouseButton {
@@ -84,9 +85,14 @@ impl Kule for App {
             }
             _ => {}
         }
+        Ok(())
     }
     // The `draw` method lets us draw to a generic canvas
-    fn draw<C>(draw: &mut Drawer<C, Self::Resources>, app: &Self, ctx: &Context<Self::Resources>)
+    fn draw<C>(
+        draw: &mut Drawer<C, Self::Resources>,
+        app: &Self,
+        ctx: &Context<Self::Resources>,
+    ) -> CanFail
     where
         C: Canvas,
     {
@@ -125,6 +131,7 @@ impl Kule for App {
             )
             .transform(|t| t.translate(fps_offset));
         });
+        Ok(())
     }
     // The `teardown` method lets us call some code when the window is closed
     fn teardown(app: Self, _ctx: &mut Context<Self::Resources>) {

@@ -1,5 +1,7 @@
 use std::error::Error;
 
+use crate::{Context, Kule};
+
 /// A kule error type
 #[derive(Debug, thiserror::Error)]
 pub enum KuleError {
@@ -52,7 +54,17 @@ impl KuleError {
     {
         KuleError::App(Box::new(error))
     }
+    /// Handle the error using an app's error handling method
+    pub fn handle<A>(self, app: &mut A, ctx: &mut Context<A::Resources>)
+    where
+        A: Kule,
+    {
+        A::handle_error(self, app, ctx)
+    }
 }
 
 /// A kule result type
 pub type KuleResult<T> = std::result::Result<T, KuleError>;
+
+/// A possible error but no return type
+pub type CanFail = KuleResult<()>;

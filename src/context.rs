@@ -12,8 +12,8 @@ use crate::{
     Kule, Mixer, SoundSource, Sounds,
 };
 use crate::{
-    Camera, Drawer, Fonts, GlyphCache, KuleResult, MeshCache, Resources, StateTracker, Vec2,
-    WindowCanvas,
+    Camera, CanFail, Drawer, Fonts, GlyphCache, KuleResult, MeshCache, Resources, StateTracker,
+    Vec2, WindowCanvas,
 };
 
 /// A handle to the app's window
@@ -108,9 +108,9 @@ where
     pub fn mouse_coords(&self) -> Vec2 {
         self.camera.pos_to_coords(self.tracker.mouse_pos())
     }
-    pub(crate) fn draw<F>(&self, mut f: F)
+    pub(crate) fn draw<F>(&self, mut f: F) -> CanFail
     where
-        F: FnMut(&mut Drawer<WindowCanvas, R>),
+        F: FnMut(&mut Drawer<WindowCanvas, R>) -> CanFail,
     {
         let mut frame = self.window.0.draw();
         let mut drawer = Drawer::new(
@@ -121,15 +121,19 @@ where
             &self.meshes,
             self.camera,
         );
-        f(&mut drawer);
+        f(&mut drawer)?;
         // #[cfg(feature = "script")]
         // if let Ok(scripts) = self.scripts() {}
         frame.finish().unwrap();
+        Ok(())
     }
     #[cfg(feature = "script")]
     /// Get a reference to the scripting environment
-    pub fn scripts(&self) -> Result<&crate::Scripts, &crate::KuleError> {
-        self.scripts.as_ref()
+    pub fn scripts(&self) -> Result<&crate::Scripts, crate::KuleError> {
+        match &self.scripts {
+            Ok(scripts) => Ok(scripts),
+            Err(e) => Err(crate::KuleError::ScriptInitialization(e.to_string())),
+        }
     }
     #[cfg(feature = "script")]
     /**
