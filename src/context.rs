@@ -144,7 +144,7 @@ where
     */
     pub fn lua<F, O>(&self, f: F) -> KuleResult<O>
     where
-        F: FnOnce(crate::LuaContext) -> KuleResult<O>,
+        F: FnOnce(&crate::Lua) -> KuleResult<O>,
     {
         match self.scripts() {
             Ok(scripts) => scripts.lua(f),

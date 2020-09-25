@@ -99,7 +99,7 @@ mod test {
                         let mut ser = LuaSerializer::new(lua);
                         let value = ser.serialize(&ctx.tracker)?;
                         lua.globals()
-                            .val::<rlua::Table>("core")?
+                            .val::<mlua::Table>("core")?
                             .set("tracker", value)?;
                         Ok(())
                     })
@@ -151,7 +151,7 @@ mod test {
                 .lua(|lua| {
                     Ok(lua
                         .globals()
-                        .val::<rlua::Table>("core")?
+                        .val::<mlua::Table>("core")?
                         .val::<f32>("rot")?)
                 })
                 .unwrap();

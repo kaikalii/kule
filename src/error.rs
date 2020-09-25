@@ -35,7 +35,7 @@ pub enum KuleError {
     #[cfg(feature = "script")]
     /// A lua error
     #[error("{0}")]
-    Lua(#[from] rlua::Error),
+    Lua(#[from] mlua::Error),
     #[cfg(feature = "script")]
     /// A lua serialization error
     #[error("{0}")]

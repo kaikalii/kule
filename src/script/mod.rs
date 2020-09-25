@@ -8,14 +8,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rlua::{FromLua, Function, Lua, ToLua};
+use mlua::{FromLua, Function, ToLua};
 use serde::ser::*;
 
 use crate::KuleResult;
 
-pub use rlua;
-pub use rlua::Context as LuaContext;
-pub use rlua::{StdLib, Table};
+pub use mlua;
+pub use mlua::{Lua, StdLib, Table};
 
 /// Defines where script modules should be saved to and loaded from
 #[derive(Debug, Clone)]
@@ -35,14 +34,12 @@ pub struct ScriptEnv {
 
 impl Default for ScriptEnv {
     fn default() -> Self {
-        ScriptEnv::new("modules", "modules", StdLib::ALL & !StdLib::IO)
+        ScriptEnv::new("modules", "modules", StdLib::ALL ^ StdLib::IO)
     }
 }
 
 impl ScriptEnv {
     /// Create a new `ScriptEnv
-    ///
-    /// `StdLib::DEBUG` is automatically removed for safety reasons.
     pub fn new<D, C>(dir: D, config: C, std_lib: StdLib) -> Self
     where
         D: AsRef<Path>,
@@ -51,7 +48,7 @@ impl ScriptEnv {
         ScriptEnv {
             dir: dir.as_ref().into(),
             config: config.into(),
-            std_lib: std_lib & !StdLib::DEBUG,
+            std_lib: std_lib & StdLib::ALL_SAFE,
         }
     }
     /// Get the file name of the config file
@@ -75,19 +72,19 @@ pub struct Scripts {
 
 impl Scripts {
     /**
-    Access the Lua context
+    Access the Lua environment
 
     For the duration of the passed closue, the program's current directory
     will be the script modules directory
     */
     pub fn lua<F, R>(&self, f: F) -> KuleResult<R>
     where
-        F: FnOnce(LuaContext) -> KuleResult<R>,
+        F: FnOnce(&Lua) -> KuleResult<R>,
     {
         let current_dir = env::current_dir()?;
         fs::create_dir_all(&self.env.dir)?;
         env::set_current_dir(&self.env.dir)?;
-        let res = self.lua.context(f)?;
+        let res = f(&self.lua)?;
         env::set_current_dir(current_dir)?;
         Ok(res)
     }
@@ -119,20 +116,17 @@ impl Scripts {
         let (lua, modules) = self.lua(|_| {
             let config_text = fs::read_to_string(self.env.config_file())?;
             let modules: Modules = toml::from_str(&config_text)?;
-            let lua = Lua::new_with(self.env.std_lib);
-            lua.context(|ctx| -> rlua::Result<()> {
-                // Load modules
-                ctx.load(
-                    &modules
-                        .list
-                        .iter()
-                        .filter(|m| m.enabled)
-                        .map(|m| format!("{0} = require(\"{0}\")\n", m.name))
-                        .collect::<String>(),
-                )
-                .exec()?;
-                Ok(())
-            })?;
+            let lua = Lua::new_with(self.env.std_lib)?;
+            // Load modules
+            lua.load(
+                &modules
+                    .list
+                    .iter()
+                    .filter(|m| m.enabled)
+                    .map(|m| format!("{0} = require(\"{0}\")\n", m.name))
+                    .collect::<String>(),
+            )
+            .exec()?;
             Ok((lua, modules))
         })?;
         self.lua = lua;
@@ -159,14 +153,14 @@ impl Scripts {
     /**
     Call a module method
 
-    The `call` closure takes the Lua context, the module table, and the function.
+    The `call` closure takes the Lua environment, the module table, and the function.
     This allows the method to be defined with either a `.` or a `:`.
 
     Nothing happens if the module table does not contain the method
     */
     pub fn call<'lua, F>(&self, module_name: &str, method_name: &str, call: F) -> KuleResult<()>
     where
-        F: Fn(LuaContext<'lua>, Table<'lua>, Function<'lua>) -> KuleResult<()>,
+        F: Fn(&'lua Lua, Table<'lua>, Function<'lua>) -> KuleResult<()>,
     {
         self.lua(|ctx| {
             let globals = ctx.globals();
@@ -180,7 +174,7 @@ impl Scripts {
     /**
     Call the same method in each module that has it
 
-    The `call` closure takes the Lua context, the module table, and the function.
+    The `call` closure takes the Lua environment, the module table, and the function.
     This allows the method to be defined with either a `.` or a `:`.
 
     Module order is respected.
@@ -190,7 +184,7 @@ impl Scripts {
     */
     pub fn batch_call<'lua, F>(&self, method_name: &str, call: F) -> KuleResult<()>
     where
-        F: Fn(LuaContext<'lua>, Table<'lua>, Function<'lua>) -> KuleResult<()>,
+        F: Fn(&'lua Lua, Table<'lua>, Function<'lua>) -> KuleResult<()>,
     {
         for name in self.enabled_modules() {
             self.call(name, method_name, &call)?;

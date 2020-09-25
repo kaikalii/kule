@@ -1,28 +1,26 @@
 use std::{convert::TryInto, fmt, num::TryFromIntError};
 
-use rlua::Value;
+use mlua::{Lua, Value};
 use serde::ser::*;
-
-use crate::LuaContext;
 
 /// A serializer that turns serializable values into Lua values
 pub struct LuaSerializer<'lua> {
-    ctx: LuaContext<'lua>,
+    lua: &'lua Lua,
     output: Value<'lua>,
     last_key: Option<Value<'lua>>,
 }
 
 impl<'lua> LuaSerializer<'lua> {
     /// Create a new `LuaSerializer` from a Lua context
-    pub fn new(ctx: LuaContext<'lua>) -> Self {
+    pub fn new(lua: &'lua Lua) -> Self {
         LuaSerializer {
-            ctx,
+            lua,
             output: Value::Nil,
             last_key: None,
         }
     }
     fn another(&self) -> Self {
-        LuaSerializer::new(self.ctx)
+        LuaSerializer::new(self.lua)
     }
     /// Serialize a value to a Lua value
     pub fn serialize<T>(&mut self, value: &T) -> Result<Value<'lua>, LuaSerializeError>
@@ -35,9 +33,9 @@ impl<'lua> LuaSerializer<'lua> {
     }
 }
 
-impl<'lua> From<LuaContext<'lua>> for LuaSerializer<'lua> {
-    fn from(ctx: LuaContext<'lua>) -> Self {
-        LuaSerializer::new(ctx)
+impl<'lua> From<&'lua Lua> for LuaSerializer<'lua> {
+    fn from(lua: &'lua Lua) -> Self {
+        LuaSerializer::new(lua)
     }
 }
 
@@ -52,7 +50,7 @@ pub enum LuaSerializeError {
     IntConversion(#[from] TryFromIntError),
     /// Lua error
     #[error("{0}")]
-    Lua(#[from] rlua::Error),
+    Lua(#[from] mlua::Error),
 }
 
 impl serde::ser::Error for LuaSerializeError {
@@ -284,7 +282,7 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
         self.serialize_str(&v.to_string())
     }
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        self.output = Value::String(self.ctx.create_string(v)?);
+        self.output = Value::String(self.lua.create_string(v)?);
         Ok(())
     }
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
@@ -317,7 +315,7 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.output = Value::String(self.ctx.create_string(variant)?);
+        self.output = Value::String(self.lua.create_string(variant)?);
         Ok(())
     }
     fn serialize_newtype_struct<T: ?Sized>(
@@ -340,14 +338,14 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
     where
         T: serde::Serialize,
     {
-        let table = self.ctx.create_table()?;
+        let table = self.lua.create_table()?;
         table.set("variant", variant)?;
         table.set("value", self.another().serialize(&value)?)?;
         self.output = Value::Table(table);
         Ok(())
     }
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.output = Value::Table(self.ctx.create_table()?);
+        self.output = Value::Table(self.lua.create_table()?);
         Ok(self)
     }
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -367,13 +365,13 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        let table = self.ctx.create_table()?;
+        let table = self.lua.create_table()?;
         table.set("variant", variant)?;
         self.output = Value::Table(table);
         Ok(self)
     }
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        self.output = Value::Table(self.ctx.create_table()?);
+        self.output = Value::Table(self.lua.create_table()?);
         Ok(self)
     }
     fn serialize_struct(
@@ -390,7 +388,7 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        let table = self.ctx.create_table()?;
+        let table = self.lua.create_table()?;
         table.set("variant", variant)?;
         self.output = Value::Table(table);
         Ok(self)
@@ -400,7 +398,7 @@ impl<'a, 'lua> Serializer for &'a mut LuaSerializer<'lua> {
 #[cfg(test)]
 #[test]
 fn lua_ser() {
-    let lua = rlua::Lua::new();
+    let lua = mlua::Lua::new();
     let module = crate::Module {
         name: "core".into(),
         enabled: false,
@@ -412,9 +410,28 @@ fn lua_ser() {
         Baz(f64, bool),
         Qux { name: &'static str, enabled: bool },
     }
-    lua.context(|ctx| {
-        let mut serializer = LuaSerializer::new(ctx);
-        let val = serializer.serialize(&module).unwrap();
+    let mut serializer = LuaSerializer::new(&lua);
+    let val = serializer.serialize(&module).unwrap();
+    if let Value::Table(table) = val {
+        for pair in table.pairs::<String, Value>() {
+            let (key, value) = pair.unwrap();
+            println!("{:?} => {:?}", key, value);
+        }
+    } else {
+        panic!()
+    }
+    println!();
+    for my_enum in vec![
+        MyEnum::Foo,
+        MyEnum::Bar(5),
+        MyEnum::Baz(3.7, true),
+        MyEnum::Qux {
+            name: "Dave",
+            enabled: true,
+        },
+    ] {
+        println!("{:?}", my_enum);
+        let val = serializer.serialize(&my_enum).unwrap();
         if let Value::Table(table) = val {
             for pair in table.pairs::<String, Value>() {
                 let (key, value) = pair.unwrap();
@@ -424,26 +441,5 @@ fn lua_ser() {
             panic!()
         }
         println!();
-        for my_enum in vec![
-            MyEnum::Foo,
-            MyEnum::Bar(5),
-            MyEnum::Baz(3.7, true),
-            MyEnum::Qux {
-                name: "Dave",
-                enabled: true,
-            },
-        ] {
-            println!("{:?}", my_enum);
-            let val = serializer.serialize(&my_enum).unwrap();
-            if let Value::Table(table) = val {
-                for pair in table.pairs::<String, Value>() {
-                    let (key, value) = pair.unwrap();
-                    println!("{:?} => {:?}", key, value);
-                }
-            } else {
-                panic!()
-            }
-            println!();
-        }
-    });
+    }
 }

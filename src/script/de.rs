@@ -2,7 +2,7 @@
 
 use std::{fmt, num::TryFromIntError};
 
-use rlua::{FromLua, Table, Value};
+use mlua::{FromLua, Table, Value};
 use serde::de::*;
 
 use crate::LuaContext;
@@ -17,7 +17,7 @@ impl<'lua> LuaDeserializer<'lua> {
     pub fn new(ctx: LuaContext<'lua>, input: Value<'lua>) -> Self {
         LuaDeserializer { ctx, input }
     }
-    fn value_as<T>(&self) -> rlua::Result<T>
+    fn value_as<T>(&self) -> mlua::Result<T>
     where
         T: FromLua<'lua>,
     {
@@ -39,7 +39,7 @@ pub enum LuaDeserializeError {
     IntConversion(#[from] TryFromIntError),
     /// Lua error
     #[error("{0}")]
-    Lua(#[from] rlua::Error),
+    Lua(#[from] mlua::Error),
 }
 
 impl<'lua> serde::de::Error for LuaDeserializeError {
